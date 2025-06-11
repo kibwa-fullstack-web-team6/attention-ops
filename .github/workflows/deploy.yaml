@@ -8,7 +8,7 @@ on:
 env:
   AWS_HOST: ${{ secrets.AWS_HOST }}
   AWS_KEY: ${{ secrets.AWS_KEY }}
-  AWS_USER: ${{ secrets.USERNAME }} 
+  AWS_USER: ${{ secrets.AWS_USER }} # root 사용자
   SSH_PORT: ${{ secrets.SSH_PORT }} 
 
 jobs:
@@ -20,30 +20,38 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4 
 
-      - name: Copy entire repository to EC2 /root/deploy
+      - name: Create tarball of repository # 레포지토리 내용을 .tar.gz 파일로 압축
+        run: |
+          tar -czf repository.tar.gz .
+
+      - name: Transfer tarball and extract on EC2 # 압축 파일 전송 및 해제
         uses: appleboy/ssh-action@master 
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
-          source: "./"
-          target: "/root/deploy/"
-          sync: true
-          debug: true 
+          source: "repository.tar.gz" 
+          target: "/tmp/repository.tar.gz"
 
-      - name: Set permissions for deployment script
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ env.AWS_HOST }}
-          username: ${{ env.AWS_USER }}
-          key: ${{ env.AWS_KEY }}
-          port: ${{ env.SSH_PORT }}
           script: |
+            # 기존 deploy 폴더 삭제 및 생성 (깔끔하게 시작)
+            rm -rf /root/deploy
+            mkdir -p /root/deploy
+            
+            # 전송된 tarball 파일을 /root/deploy 에 압축 해제
+            tar -xzf /tmp/repository.tar.gz -C /root/deploy/
+            
+            # 임시 tarball 파일 삭제
+            rm /tmp/repository.tar.gz
+            
+            # deploy.sh 스크립트에 실행 권한 부여
             chmod +x /root/deploy/sh/deploy.sh
-            chmod 755 /root/deploy/sh # sh 폴더
-            chmod 755 /root/deploy   # deploy 폴더 (만약 AWS_USER가 root가 아니라면 필요)
-          debug: true
+            
+            # (선택 사항) deploy/sh 디렉토리 권한 설정
+            chmod 755 /root/deploy/sh
+            chmod 755 /root/deploy
+          debug: true # 이 스텝에서 무슨 일이 일어나는지 자세히 볼 수 있습니다.
 
       - name: Execute remote deployment script
         uses: appleboy/ssh-action@master
@@ -53,3 +61,4 @@ jobs:
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
           script_path: "/root/deploy/sh/deploy.sh" 
+          debug: true
