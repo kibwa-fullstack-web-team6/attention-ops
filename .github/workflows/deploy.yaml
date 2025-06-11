@@ -1,31 +1,44 @@
-name: push and deploy
-on: 
+name: Deploy to EC2 with all repo content
+
+on:
   push:
     branches:
-      - main
+      - main # main 브랜치에 푸시될 때 워크플로우 실행
 
 env:
   AWS_HOST: ${{ secrets.AWS_HOST }}
   AWS_KEY: ${{ secrets.AWS_KEY }}
-  AWS_USER: ${{ secrets.USERNAME }}
+  AWS_USER: ${{ secrets.USERNAME }} 
   SSH_PORT: ${{ secrets.SSH_PORT }} 
 
 jobs:
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4 
-        
-      - name: Deploy with shell script
+  deploy:
+    name: Build and Deploy Application
+    runs-on: ubuntu-latest 
 
+    steps:
+      - name: Checkout repository code 
+        uses: actions/checkout@v4
+
+      - name: Copy entire repository to EC2 /root/deploy # 모든 파일 EC2로 복사
         uses: appleboy/ssh-action@master 
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
-          port: ${{ env.SSH_PORT }} 
+          port: ${{ env.SSH_PORT }}
+      
+          source: "./" 
+          target: "/root/deploy/"
+          sync: true 
           
-          script_path: "./sh/deploy.sh" 
-          debug: true
+
+      - name: Execute remote deployment script # EC2에서 deploy.sh 실행
+        uses: appleboy/ssh-action@master # 최신 버전 사용
+        with:
+          host: ${{ env.AWS_HOST }}
+          username: ${{ env.AWS_USER }}
+          key: ${{ env.AWS_KEY }}
+          port: ${{ env.SSH_PORT }}
+          script_path: "/root/deploy/sh/deploy.sh" 
+          debug: true # 디버깅 시 주석 해제
