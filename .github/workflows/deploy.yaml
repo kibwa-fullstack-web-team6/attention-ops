@@ -20,21 +20,29 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 압축 파일을 상위 디렉토리에 생성하여 충돌 방지
       - name: Create tarball of repository
         run: |
           tar -czf ../repository.tar.gz --exclude='./.git' .
 
-      # 압축 파일 경로를 상위 디렉토리로 지정
-      - name: Transfer tarball and extract on EC2
-        uses: appleboy/ssh-action@master
+      # 1. [변경] scp-action을 사용하여 파일을 EC2로 전송
+      - name: Transfer tarball to EC2
+        uses: appleboy/scp-action@master
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
           source: "../repository.tar.gz"
-          target: "/tmp/repository.tar.gz"
+          target: "/tmp" # EC2의 /tmp 디렉토리에 파일을 전송
+
+      # 2. [변경] ssh-action을 사용하여 원격지에서 명령어 실행
+      - name: Extract tarball and setup permissions
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.AWS_HOST }}
+          username: ${{ env.AWS_USER }}
+          key: ${{ env.AWS_KEY }}
+          port: ${{ env.SSH_PORT }}
           script: |
             rm -rf /root/deploy
             mkdir -p /root/deploy
@@ -45,6 +53,7 @@ jobs:
             chmod 755 /root/deploy
           debug: true
 
+      # 3. 기존과 동일하게 배포 스크립트 실행
       - name: Execute remote deployment script
         uses: appleboy/ssh-action@master
         with:
