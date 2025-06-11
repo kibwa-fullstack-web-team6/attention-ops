@@ -15,12 +15,18 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: push with shell files
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Deploy with shell script
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.NODEJS_PORT }}
+          source: "./sh/deploy.sh"
+          target: "/tmp/deploy.sh" # 또는 "~/deploy_script.sh"도 가능합니다.
           script: |
-            ./deploy.sh
+            chmod +x /tmp/deploy.sh 
+            /tmp/deploy.sh
+            rm /tmp/deploy.sh
