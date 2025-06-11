@@ -61,5 +61,5 @@ jobs:
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
-          script_path: "/root/deploy/sh/deploy.sh"
+          script: sudo /root/deploy/sh/deploy.sh
           debug: true
