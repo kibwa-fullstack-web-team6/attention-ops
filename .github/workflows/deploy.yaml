@@ -3,7 +3,7 @@ name: Deploy to EC2 with all repo content
 on:
   push:
     branches:
-      - main # main 브랜치에 푸시될 때 워크플로우 실행
+      - main
 
 env:
   AWS_HOST: ${{ secrets.AWS_HOST }}
@@ -14,31 +14,42 @@ env:
 jobs:
   deploy:
     name: Build and Deploy Application
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository code 
-        uses: actions/checkout@v4
+      - name: Checkout repository code
+        uses: actions/checkout@v4 
 
-      - name: Copy entire repository to EC2 /root/deploy # 모든 파일 EC2로 복사
+      - name: Copy entire repository to EC2 /root/deploy
         uses: appleboy/ssh-action@master 
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
-      
-          source: "./" 
+          source: "./"
           target: "/root/deploy/"
-          sync: true 
-          
+          sync: true
+          debug: true 
 
-      - name: Execute remote deployment script # EC2에서 deploy.sh 실행
-        uses: appleboy/ssh-action@master # 최신 버전 사용
+      - name: Set permissions for deployment script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.AWS_HOST }}
+          username: ${{ env.AWS_USER }}
+          key: ${{ env.AWS_KEY }}
+          port: ${{ env.SSH_PORT }}
+          script: |
+            chmod +x /root/deploy/sh/deploy.sh
+            chmod 755 /root/deploy/sh # sh 폴더
+            chmod 755 /root/deploy   # deploy 폴더 (만약 AWS_USER가 root가 아니라면 필요)
+          debug: true
+
+      - name: Execute remote deployment script
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
           script_path: "/root/deploy/sh/deploy.sh" 
-          debug: true # 디버깅 시 주석 해제
