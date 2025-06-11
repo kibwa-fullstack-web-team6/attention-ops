@@ -20,14 +20,14 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4 
 
-      - name: Create tarball of repository # 레포지토리 내용을 .tar.gz 파일로 압축
+      - name: Create tarball of repository
         run: |
-          # --exclude 옵션의 위치를 tar 명령 바로 뒤로 옮깁니다.
-          tar -czf repository.tar.gz --exclude='./.git' . 
-        # 이 스텝이 실행되면 GitHub Actions 가상 머신의 현재 작업 디렉토리에
-        # repository.tar.gz 파일이 생성됩니다.
+          cd ..
+          tar -czf repository.tar.gz ${{ github.event.repository.name }} --exclude='./${{ github.event.repository.name }}/.git'
+          mv repository.tar.gz ${{ github.event.repository.name }}/
+          cd ${{ github.event.repository.name }}/
 
-      - name: Transfer tarball and extract on EC2 # 압축 파일 전송 및 해제
+      - name: Transfer tarball and extract on EC2
         uses: appleboy/ssh-action@master 
         with:
           host: ${{ env.AWS_HOST }}
@@ -46,7 +46,7 @@ jobs:
             chmod 755 /root/deploy
           debug: true 
 
-      - name: Execute remote deployment script # EC2에서 deploy.sh 실행
+      - name: Execute remote deployment script
         uses: appleboy/ssh-action@master
         with:
           host: ${{ env.AWS_HOST }}
