@@ -22,7 +22,7 @@ jobs:
 
       - name: Create tarball of repository
         run: |
-          tar -czf repository.tar.gz --exclude='./.git' -C . .
+          tar -czf repository.tar.gz --exclude='./.git' --exclude='repository.tar.gz' -C . .
 
       - name: Transfer tarball and extract on EC2
         uses: appleboy/ssh-action@master 
