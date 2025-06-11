@@ -1,0 +1,26 @@
+name: push and deploy
+on: 
+  push:
+    branches:
+      - main
+
+env:
+  AWS_HOST: ${{ secrets.AWS_HOST }}
+  AWS_KEY: ${{ secrets.AWS_KEY }}
+  AWS_USER: ${{ secrets.AWS_USER }}
+  NODEJS_PORT: ${{ secrets.NODEJS_PORT }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: push with shell files
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ env.AWS_HOST }}
+          username: ${{ env.AWS_USER }}
+          key: ${{ env.AWS_KEY }}
+          port: ${{ env.NODEJS_PORT }}
+          script: |
+            ./deploy.sh
