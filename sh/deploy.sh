@@ -25,8 +25,8 @@ echo "Installing npm dependencies..."
 npm install || { echo "ERROR: npm install failed. Exiting."; exit 1; }
 echo "npm install complete."
 
-echo "Restarting PM2 processes..."
-pm2 restart all || pm2 reload all || { echo "ERROR: PM2 restart/reload failed. Check PM2 status on the EC2 instance."; exit 1; }
-echo "PM2 restart command issued."
+echo "Restarting PM2 processes using ecosystem file..."
+pm2 startOrRestart ecosystem.config.js --env production
+echo "PM2 command with ecosystem file issued."
 
 echo "Deployment script finished successfully."
