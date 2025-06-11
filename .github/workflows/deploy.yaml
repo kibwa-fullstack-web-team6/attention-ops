@@ -18,20 +18,22 @@ jobs:
 
     steps:
       - name: Checkout repository code
-        uses: actions/checkout@v4 
+        uses: actions/checkout@v4
 
+      # 압축 파일을 상위 디렉토리에 생성하여 충돌 방지
       - name: Create tarball of repository
         run: |
-          tar -czf repository.tar.gz --exclude='./.git' --exclude='repository.tar.gz' -C . .
+          tar -czf ../repository.tar.gz --exclude='./.git' .
 
+      # 압축 파일 경로를 상위 디렉토리로 지정
       - name: Transfer tarball and extract on EC2
-        uses: appleboy/ssh-action@master 
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
-          source: "repository.tar.gz" 
+          source: "../repository.tar.gz"
           target: "/tmp/repository.tar.gz"
           script: |
             rm -rf /root/deploy
@@ -41,7 +43,7 @@ jobs:
             chmod +x /root/deploy/sh/deploy.sh
             chmod 755 /root/deploy/sh
             chmod 755 /root/deploy
-          debug: true 
+          debug: true
 
       - name: Execute remote deployment script
         uses: appleboy/ssh-action@master
@@ -50,5 +52,5 @@ jobs:
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
           port: ${{ env.SSH_PORT }}
-          script_path: "/root/deploy/sh/deploy.sh" 
+          script_path: "/root/deploy/sh/deploy.sh"
           debug: true
