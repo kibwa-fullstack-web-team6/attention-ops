@@ -8,7 +8,7 @@ env:
   AWS_HOST: ${{ secrets.AWS_HOST }}
   AWS_KEY: ${{ secrets.AWS_KEY }}
   AWS_USER: ${{ secrets.AWS_USER }}
-  NODEJS_PORT: ${{ secrets.NODEJS_PORT }}
+  SSH_PORT: ${{ secrets.SSH_PORT }} 
 
 jobs:
   build:
@@ -17,16 +17,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        
       - name: Deploy with shell script
-        uses: appleboy/ssh-action@v0.1.10
+        uses: appleboy/ssh-action@master 
         with:
           host: ${{ env.AWS_HOST }}
           username: ${{ env.AWS_USER }}
           key: ${{ env.AWS_KEY }}
-          port: ${{ env.NODEJS_PORT }}
+
+          port: ${{ env.SSH_PORT }} 
           source: "./sh/deploy.sh"
-          target: "/tmp/deploy.sh" # 또는 "~/deploy_script.sh"도 가능합니다.
+          target: "/tmp/deploy_script.sh" 
+          
           script: |
-            chmod +x /tmp/deploy.sh 
-            /tmp/deploy.sh
-            rm /tmp/deploy.sh
+            chmod +x /tmp/deploy_script.sh
+            /tmp/deploy_script.sh
+            rm /tmp/deploy_script.sh
