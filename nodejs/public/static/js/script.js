@@ -10,36 +10,23 @@ let isVideoPlaying = false;
 let lastDetectionTime = 0; // 마지막 감지 시간
 const detectionInterval = 1000; // 1초 (1000ms) 간격으로 랜드마크 감지
 
-// 서버 전송 관련 변수 - 지금은 사용하지 않음
-const featuresBuffer = []; // << 변경: landmarksBuffer -> featuresBuffer 로 이름 변경. 가공된 특징 데이터를 임시 저장.
-// const sendInterval = 10 * 1000; // 10초 (10000ms) 간격으로 서버에 전송 (비활성화)
-// const SERVER_URL = "http://localhost:3000/landmarks"; // (비활성화)
+// 서버 전송 관련 변수
+const featuresBuffer = [];
 
-// =================================================================
-// ✨ 1. 특징 추출을 위한 헬퍼 함수 추가
-// =================================================================
-
-// 두 랜드마크(점) 사이의 2D 거리를 계산하는 함수
+// 특징 추출을 위한 헬퍼 함수
 function getDistance(p1, p2) {
     return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 }
 
-// 눈 랜드마크를 기반으로 EAR(눈 종횡비)을 계산하는 함수
 function getEAR(eyeLandmarks) {
-    // 눈의 수직 거리 계산
     const verDist1 = getDistance(eyeLandmarks[1], eyeLandmarks[5]);
     const verDist2 = getDistance(eyeLandmarks[2], eyeLandmarks[4]);
-
-    // 눈의 수평 거리 계산
     const horDist = getDistance(eyeLandmarks[0], eyeLandmarks[3]);
-
-    // EAR 공식
     const ear = (verDist1 + verDist2) / (2.0 * horDist);
     return ear;
 }
 
-
-// MediaPipe FaceMesh 설정 (기존과 동일)
+// MediaPipe FaceMesh 설정
 const faceMesh = new FaceMesh({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
 });
@@ -52,32 +39,49 @@ faceMesh.setOptions({
     modelComplexity: 0,
 });
 
-faceMesh.onResults(onResults); // 결과 처리 함수 연결
+faceMesh.onResults(onResults);
 
-// 웹캠 스트림 설정 및 MediaPipe 처리 시작 (기존과 거의 동일)
+// ✨ 수정 1: 함수의 가장 첫 줄에 테스트 로그 추가
 async function initializeWebcamAndMediaPipeProcessing() {
-    // ... (이 부분의 코드는 기존과 완전히 동일합니다) ...
-    // ... (웹캠 활성화 및 에러 처리) ...
-    console.log("테스트 2번 - 웹캠 함수 진입");
-    // playing 이벤트 리스너에서 서버 전송 시작 함수 호출 부분만 비활성화
-    videoElement.addEventListener("playing", () => {
-        console.log("🟢 Video element is playing.");
-        isVideoPlaying = true;
-        
-        if (isFaceMeshInitialized) {
-            console.log("🟢 웹캠, MediaPipe 모두 준비 완료. 프레임 전송 시작.");
-            sendFramesToMediaPipe(); // 첫 감지 시작
-            // startSendingDataToServer(); // <<< ✨ 2. 서버 전송 로직 호출 비활성화
-        } else {
-            console.log("🟡 웹캠은 준비되었지만, MediaPipe가 아직 로드 대기 중...");
-        }
-    }, { once: true });
+    console.log("테스트 2번 - 웹캠 함수 진입"); // 테스트를 위해 로그 메시지 수정
+    
+    statusElement.textContent = "웹캠 활성화 요청 중...";
 
-    // ... (이하 웹캠 관련 에러 처리 로직은 기존과 동일합니다) ...
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const msg = "🚨 브라우저가 웹캠 API(getUserMedia)를 지원하지 않습니다.";
+        console.error(msg);
+        statusElement.textContent = msg;
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+            audio: false,
+        });
+        videoElement.srcObject = stream;
+        await new Promise((resolve) => {
+            videoElement.onloadedmetadata = () => {
+                videoElement.play();
+                videoElement.style.display = "block";
+                resolve();
+            };
+        });
+        videoElement.addEventListener("playing", () => {
+            isVideoPlaying = true;
+            if (isFaceMeshInitialized) {
+                sendFramesToMediaPipe();
+            }
+        }, { once: true });
+    } catch (error) {
+        let customErrorMessage = `웹캠 활성화 실패: ${error.name || "UnknownError"}`;
+        // ... (이하 상세 에러 메시지 부분은 기존과 동일)
+        statusElement.textContent = `🚨 ${customErrorMessage}`;
+        console.error("🔴 웹캠 활성화 치명적인 실패:", error);
+    }
 }
 
-
-// MediaPipe에 프레임 전송 루프 (기존과 동일)
+// MediaPipe에 프레임 전송 루프
 async function sendFramesToMediaPipe() {
     if (!isFaceMeshInitialized || !isVideoPlaying) {
         setTimeout(sendFramesToMediaPipe, detectionInterval);
@@ -98,81 +102,45 @@ async function sendFramesToMediaPipe() {
     setTimeout(sendFramesToMediaPipe, 100);
 }
 
-
-// =================================================================
-// ✨ 3. MediaPipe 결과 처리 함수 (핵심 수정 부분)
-// =================================================================
+// MediaPipe 결과 처리 함수
 function onResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-        const faceLandmarks = results.multiFaceLandmarks[0]; // 첫 번째 얼굴의 랜드마크만 사용
-
-        // MediaPipe 랜드마크 인덱스 (Face Mesh 문서 기준)
+        const faceLandmarks = results.multiFaceLandmarks[0];
         const LEFT_EYE_INDICES = [362, 385, 387, 263, 373, 380];
         const RIGHT_EYE_INDICES = [33, 160, 158, 133, 153, 144];
-
-        // 인덱스를 사용해 실제 랜드마크 좌표 추출
         const leftEye = LEFT_EYE_INDICES.map(i => faceLandmarks[i]);
         const rightEye = RIGHT_EYE_INDICES.map(i => faceLandmarks[i]);
-
-        // EAR 계산
         const earLeft = getEAR(leftEye);
         const earRight = getEAR(rightEye);
-
-        // 가공된 특징 데이터를 버퍼에 추가
         const features = {
             timestamp: new Date().toISOString(),
             ear_left: earLeft,
             ear_right: earRight
         };
         featuresBuffer.push(features);
-
-        // EAR 값 콘솔에 출력하여 확인
         console.log(`🔵 EAR Left: ${earLeft.toFixed(3)}, EAR Right: ${earRight.toFixed(3)}`);
-        
         statusElement.textContent = `🟢 특징 데이터 수집 중... (${featuresBuffer.length}개)`;
-        
     } else {
-        console.log("🟡 얼굴을 찾고 있습니다.");
         statusElement.textContent = "얼굴을 찾고 있습니다... (카메라를 정면으로 바라봐 주세요)";
     }
     canvasCtx.restore();
 }
 
-// =================================================================
-// ✨ 4. 서버 전송 관련 함수 주석 처리 (비활성화)
-// =================================================================
-/*
-async function sendLandmarksToServer() {
-    // ... (이하 서버 전송 로직 전체 비활성화) ...
-}
-
-function startSendingDataToServer() {
-    console.log(`🟢 ${sendInterval / 1000}초마다 서버로 랜드마크 데이터 전송을 시작합니다.`);
-    setInterval(sendLandmarksToServer, sendInterval);
-}
-*/
-
-
-// 애플리케이션 시작 (playing 이벤트 리스너 부분 외에는 기존과 동일)
-document.addEventListener("DOMContentLoaded", async () => {
-    console.log("🟢 DOMContentLoaded: 웹페이지 로드 완료. 초기화 시작.");
+// ✨ 수정 2: 맨 아래 이벤트 리스너를 테스트용으로 교체
+document.addEventListener("DOMContentLoaded", () => {
     console.log("테스트 1번");
-    await initializeWebcamAndMediaPipeProcessing();
+    initializeWebcamAndMediaPipeProcessing(); // async/await 없이 호출
     console.log("테스트 3번");
-    statusElement.textContent = "MediaPipe 모델 로드 중...";
-    console.log("🟢 MediaPipe 모델 로드 시작: faceMesh.initialize() 호출.");
     
-    await faceMesh.initialize().then(() => {
+    // MediaPipe 모델 초기화는 그대로 진행
+    faceMesh.initialize().then(() => {
         isFaceMeshInitialized = true;
         console.log("🟢 isFaceMeshInitialized 플래그가 TRUE로 설정됨.");
-
         if (isVideoPlaying) {
-            console.log("🟢 웹캠, MediaPipe 모두 준비 완료. 프레임 전송 시작.");
             sendFramesToMediaPipe();
-            // startSendingDataToServer(); // <<< ✨ 여기도 비활성화
         }
     });
 });
