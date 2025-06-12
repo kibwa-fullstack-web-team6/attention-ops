@@ -1,10 +1,10 @@
+# [최종 수정] docker-compose.yml
+
 services:
-  # 1. Node.js 애플리케이션 서비스
+  # 1. Node.js 서비스 정의
   nodejs-app:
     container_name: attention-nodejs
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: hwengdeong/attention-app:latest
     ports:
       - "3000:3000"
     restart: always
@@ -14,19 +14,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
 
-  # ✨✨✨ 새로 추가된 부분 ✨✨✨
   # 2. Redis 서비스 정의
   redis:
     container_name: attention-redis
-
     image: "redis:alpine"
-    ports:
-      - "6379:6379"
     restart: always
     networks:
       - attention-network
 
-# ✨ 새로 추가: 서비스들이 서로 통신할 가상 네트워크를 정의합니다.
 networks:
   attention-network:
     driver: bridge
