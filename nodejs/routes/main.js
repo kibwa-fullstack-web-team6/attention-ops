@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-
+const redis = require('redis');
 
 router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
@@ -22,19 +22,31 @@ router.get('/mainService', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public/pages', 'mainService.html'));
 });
 
-router.post('/landmarks', (req, res) => {
-    // 클라이언트가 보낸 데이터는 req.body에 들어있습니다.
+// 데이터를 받아 Redis에 발행
+router.post('/api/collect', async (req, res) => {
     const { data } = req.body; 
 
     if (!data || data.length === 0) {
         return res.status(400).json({ status: 'error', message: '데이터가 없습니다.' });
     }
-    
-    console.log(`✅ ${data.length}개의 특징 데이터 묶음 수신 완료!`);
-    console.log('첫 번째 데이터:', data[0]);
 
-    res.json({ status: 'success', received_count: data.length });
+    try {
+        const channel = 'attention-data';
+        const message = JSON.stringify(data);
+
+        await redisClient.publish(channel, message);
+        console.log(`🔵 Published ${data.length} records to Redis channel: ${channel}`);
+
+        res.status(200).json({ status: 'success', received_count: data.length });
+
+    } catch (err) {
+        console.error('🔴 Failed to publish to Redis', err);
+        res.status(500).json({ status: 'error', message: 'Internal server error' });
+    }
 });
+
+
+
 
 
 module.exports = router;
