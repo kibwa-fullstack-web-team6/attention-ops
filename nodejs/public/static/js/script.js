@@ -58,7 +58,7 @@ faceMesh.onResults(onResults); // 결과 처리 함수 연결
 async function initializeWebcamAndMediaPipeProcessing() {
     // ... (이 부분의 코드는 기존과 완전히 동일합니다) ...
     // ... (웹캠 활성화 및 에러 처리) ...
-    
+    console.log("테스트 2번 - 웹캠 함수 진입");
     // playing 이벤트 리스너에서 서버 전송 시작 함수 호출 부분만 비활성화
     videoElement.addEventListener("playing", () => {
         console.log("🟢 Video element is playing.");
@@ -159,9 +159,9 @@ function startSendingDataToServer() {
 // 애플리케이션 시작 (playing 이벤트 리스너 부분 외에는 기존과 동일)
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("🟢 DOMContentLoaded: 웹페이지 로드 완료. 초기화 시작.");
-
+    console.log("테스트 1번");
     await initializeWebcamAndMediaPipeProcessing();
-
+    console.log("테스트 3번");
     statusElement.textContent = "MediaPipe 모델 로드 중...";
     console.log("🟢 MediaPipe 모델 로드 시작: faceMesh.initialize() 호출.");
     
