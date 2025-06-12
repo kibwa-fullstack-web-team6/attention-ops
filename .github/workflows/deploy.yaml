@@ -26,6 +26,7 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-app:latest
+          no-cache: true # Docker 빌드 캐시를 사용하지 않도록 설정
 
   deploy:
     needs: build-and-push
