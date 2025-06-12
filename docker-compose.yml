@@ -22,6 +22,22 @@ services:
     networks:
       - attention-network
 
+  # 3. 데이터 저장 서비스 (Python)
+  session-data-saver:
+    container_name: attention-data-saver
+    build:
+      context: ./sessionDataSave
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - attention-network
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./data_storage:/app/saved_data
+
+
 networks:
   attention-network:
     driver: bridge
