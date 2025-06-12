@@ -7,6 +7,13 @@ router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// Health check 
+router.get('/health', (req, res) => {
+
+    res.status(200).send('OK');
+});
+
+
 
 router.get('/mainService', (req, res) => {
 
