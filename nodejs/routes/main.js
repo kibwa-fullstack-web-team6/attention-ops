@@ -23,7 +23,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/mainService', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'pages', 'mainService.html'));
+    res.sendFile(path.join(__dirname, '..', 'public', 'pages', 'mainService.html'));
 });
 
 router.get('/health', (req, res) => {
