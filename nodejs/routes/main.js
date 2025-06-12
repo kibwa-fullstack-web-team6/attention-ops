@@ -11,6 +11,8 @@ router.get('/', (req, res) => {
 router.get('/health', (req, res) => {
 
     res.status(200).send('OK');
+    console.log('Health check 완료!');
+
 });
 
 
