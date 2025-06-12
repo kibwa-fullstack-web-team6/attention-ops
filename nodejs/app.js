@@ -16,8 +16,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 라우터 설정
-const mainRouter = require('./routes/main');
-app.use('/', mainRouter); // '/' 경로로 오는 모든 요청은 mainRouter가 처리
+const main = require('./routes/main');
+app.use('/', main); // '/' 경로로 오는 모든 요청은 mainRouter가 처리
 
 app.listen(app.get('port'), () => {
     console.log(`Server is started~! Port : ${app.get('port')}`);
