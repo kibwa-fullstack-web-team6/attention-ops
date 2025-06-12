@@ -34,9 +34,9 @@ jobs:
       - name: Deploy to EC2 instance
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_KEY }}
           # EC2 서버에서 실행할 스크립트
           script: |
             cd /work/attention
