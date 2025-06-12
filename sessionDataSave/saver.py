@@ -10,7 +10,7 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 
 # 데이터를 저장할 폴더를 지정하고, 없으면 생성합니다.
-DATA_DIR = "saved_data"
+DATA_DIR = "dataStorage"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
