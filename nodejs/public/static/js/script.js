@@ -10,7 +10,7 @@ let isVideoPlaying = false;
 let lastDetectionTime = 0; // 마지막 감지 시간
 const detectionInterval = 1000; // 1초 (1000ms) 간격으로 랜드마크 감지
 
-// 서버 전송 관련 변수
+// 서버 전송 관련 변수 (현재 비활성화)
 const featuresBuffer = [];
 
 // 특징 추출을 위한 헬퍼 함수
@@ -41,10 +41,9 @@ faceMesh.setOptions({
 
 faceMesh.onResults(onResults);
 
-// ✨ 수정 1: 함수의 가장 첫 줄에 테스트 로그 추가
+// 웹캠 스트림 초기화 함수
 async function initializeWebcamAndMediaPipeProcessing() {
-    console.log("테스트 2번 - 웹캠 함수 진입"); // 테스트를 위해 로그 메시지 수정
-    
+    console.log("🟢 웹캠 초기화 함수 진입.");
     statusElement.textContent = "웹캠 활성화 요청 중...";
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -59,23 +58,31 @@ async function initializeWebcamAndMediaPipeProcessing() {
             video: { width: 640, height: 480 },
             audio: false,
         });
+
+        console.log("🟢 웹캠 스트림 획득 성공.");
         videoElement.srcObject = stream;
-        await new Promise((resolve) => {
-            videoElement.onloadedmetadata = () => {
-                videoElement.play();
-                videoElement.style.display = "block";
-                resolve();
-            };
-        });
+
+        videoElement.onloadedmetadata = () => {
+            console.log("🟢 비디오 메타데이터 로드 완료. 재생 시작.");
+            videoElement.play();
+            videoElement.style.display = "block";
+        };
+        
         videoElement.addEventListener("playing", () => {
+            console.log("🟢 비디오 재생 시작됨.");
             isVideoPlaying = true;
+            // 비디오 재생이 시작되었을 때, 만약 MediaPipe도 준비되었다면 프레임 전송 시작
             if (isFaceMeshInitialized) {
+                console.log("🟢 웹캠, MediaPipe 모두 준비 완료. 프레임 전송 시작.");
                 sendFramesToMediaPipe();
             }
         }, { once: true });
+
     } catch (error) {
         let customErrorMessage = `웹캠 활성화 실패: ${error.name || "UnknownError"}`;
-        // ... (이하 상세 에러 메시지 부분은 기존과 동일)
+        if (error.name === "NotAllowedError") customErrorMessage += " - 카메라 사용 권한이 거부되었습니다.";
+        else if (error.name === "NotFoundError") customErrorMessage += " - 사용 가능한 카메라를 찾을 수 없습니다.";
+        // ... (기타 상세 에러 메시지) ...
         statusElement.textContent = `🚨 ${customErrorMessage}`;
         console.error("🔴 웹캠 활성화 치명적인 실패:", error);
     }
@@ -83,13 +90,10 @@ async function initializeWebcamAndMediaPipeProcessing() {
 
 // MediaPipe에 프레임 전송 루프
 async function sendFramesToMediaPipe() {
-    if (!isFaceMeshInitialized || !isVideoPlaying) {
-        setTimeout(sendFramesToMediaPipe, detectionInterval);
+    if (!isFaceMeshInitialized || !isVideoPlaying || videoElement.paused || videoElement.ended) {
         return;
     }
-    if (videoElement.paused || videoElement.ended) {
-        return;
-    }
+
     const now = performance.now();
     if (now - lastDetectionTime >= detectionInterval) {
         if (videoElement.videoWidth > 0) {
@@ -99,7 +103,8 @@ async function sendFramesToMediaPipe() {
             lastDetectionTime = now;
         }
     }
-    setTimeout(sendFramesToMediaPipe, 100);
+    // requestAnimationFrame을 사용하면 더 효율적이지만, 지금은 setTimeout으로 유지
+    setTimeout(sendFramesToMediaPipe, 100); 
 }
 
 // MediaPipe 결과 처리 함수
@@ -111,36 +116,51 @@ function onResults(results) {
         const faceLandmarks = results.multiFaceLandmarks[0];
         const LEFT_EYE_INDICES = [362, 385, 387, 263, 373, 380];
         const RIGHT_EYE_INDICES = [33, 160, 158, 133, 153, 144];
+        
         const leftEye = LEFT_EYE_INDICES.map(i => faceLandmarks[i]);
         const rightEye = RIGHT_EYE_INDICES.map(i => faceLandmarks[i]);
+
         const earLeft = getEAR(leftEye);
         const earRight = getEAR(rightEye);
+
         const features = {
             timestamp: new Date().toISOString(),
             ear_left: earLeft,
             ear_right: earRight
         };
         featuresBuffer.push(features);
+
         console.log(`🔵 EAR Left: ${earLeft.toFixed(3)}, EAR Right: ${earRight.toFixed(3)}`);
         statusElement.textContent = `🟢 특징 데이터 수집 중... (${featuresBuffer.length}개)`;
+        
     } else {
         statusElement.textContent = "얼굴을 찾고 있습니다... (카메라를 정면으로 바라봐 주세요)";
     }
     canvasCtx.restore();
 }
 
-// ✨ 수정 2: 맨 아래 이벤트 리스너를 테스트용으로 교체
-document.addEventListener("DOMContentLoaded", () => {
-    console.log("테스트 1번");
-    initializeWebcamAndMediaPipeProcessing(); // async/await 없이 호출
-    console.log("테스트 3번");
+// MediaPipe 초기화 함수
+async function initializeMediaPipe() {
+    statusElement.textContent = "MediaPipe 모델 로드 중...";
+    console.log("🟢 MediaPipe 모델 로드 시작.");
     
-    // MediaPipe 모델 초기화는 그대로 진행
-    faceMesh.initialize().then(() => {
-        isFaceMeshInitialized = true;
-        console.log("🟢 isFaceMeshInitialized 플래그가 TRUE로 설정됨.");
-        if (isVideoPlaying) {
-            sendFramesToMediaPipe();
-        }
-    });
+    await faceMesh.initialize();
+    
+    isFaceMeshInitialized = true;
+    console.log("🟢 MediaPipe 모델 초기화 완료.");
+
+    // 모델 로딩이 끝났을 때, 만약 비디오가 이미 재생 중이라면 프레임 전송 시작
+    if (isVideoPlaying) {
+        console.log("🟢 웹캠, MediaPipe 모두 준비 완료. 프레임 전송 시작.");
+        sendFramesToMediaPipe();
+    }
+}
+
+// 애플리케이션 시작 지점
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("🟢 DOMContentLoaded: 페이지 로드 완료. 초기화 시작.");
+    
+    // 두 개의 비동기 초기화 함수를 병렬로 실행 시작
+    initializeWebcamAndMediaPipeProcessing();
+    initializeMediaPipe();
 });
