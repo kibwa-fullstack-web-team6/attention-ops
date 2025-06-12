@@ -3,7 +3,8 @@ name: Docker CI/CD for Attention App
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - main
 
 jobs:
   # 첫 번째 Job: Docker 이미지 빌드 및 푸시
