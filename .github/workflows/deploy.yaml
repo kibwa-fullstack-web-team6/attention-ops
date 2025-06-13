@@ -61,5 +61,5 @@ jobs:
             docker pull $DOCKERHUB_USER/attention-app:latest
             docker pull $DOCKERHUB_USER/attention-websocket:latest
             docker pull $DOCKERHUB_USER/attention-data-saver:latest
-            docker compose down
+            docker system prune -a -f
             docker compose up -d --remove-orphans
