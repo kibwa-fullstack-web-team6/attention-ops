@@ -68,4 +68,5 @@ jobs:
             docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/attention-app:latest
             docker compose down
+            docker compose build
             docker compose up -d
