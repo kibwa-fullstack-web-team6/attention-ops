@@ -102,7 +102,11 @@ function onResults(results) {
         const rightEye = RIGHT_EYE_INDICES.map(i => faceLandmarks[i]);
         const earLeft = getEAR(leftEye);
         const earRight = getEAR(rightEye);
-        const features = { timestamp: new Date().toISOString(), ear_left: earLeft, ear_right: earRight };
+        const features = {
+            timestamp: new Date().toISOString(),
+            ear_left: parseFloat(earLeft.toFixed(3)),
+            ear_right: parseFloat(earRight.toFixed(3))
+        };
         featuresBuffer.push(features);
         statusElement.textContent = `🟢 특징 데이터 수집 중... (${featuresBuffer.length}개)`;
     } else {
