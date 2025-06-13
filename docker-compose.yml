@@ -37,6 +37,24 @@ services:
     volumes:
       - ./dataStorage:/app/dataStorage
 
+      # 4. Rust 웹소켓 서비스
+  websocket:
+    container_name: attention-websocket
+    build:
+      # 이 서비스의 빌드 컨텍스트는 'websocket' 폴더입니다.
+      context: ./websocket
+      dockerfile: Dockerfile
+    ports:
+      # EC2의 9001번 포트를 컨테이너의 9001번 포트로 연결합니다.
+      - "9001:9001"
+    restart: always
+    networks:
+      - attention-network
+    environment:
+      # 이 서비스도 Redis에 접속해야 하므로 환경 변수를 주입합니다.
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
 
 networks:
   attention-network:
