@@ -5,34 +5,33 @@ use futures_util::{StreamExt, SinkExt};
 use redis::AsyncCommands;
 use tokio::signal;
 
+use tokio::signal::unix::{signal, SignalKind};
+
 #[tokio::main]
 async fn main() {
-    // main 함수는 변경 없습니다.
+    // --- Redis 클라이언트 및 TCP 리스너 설정 (이전과 동일) ---
     let redis_host = env::var("REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let redis_port = env::var("REDIS_PORT").unwrap_or_else(|_| "6379".to_string());
     let redis_url = format!("redis://{}:{}", redis_host, redis_port);
 
     let redis_client = match redis::Client::open(redis_url) {
         Ok(client) => client,
-        Err(e) => {
-            eprintln!("🔴 치명적 에러: Redis 클라이언트 생성 실패: {:?}", e);
-            return;
-        }
+        Err(e) => { eprintln!("🔴 치명적 에러: Redis 클라이언트 생성 실패: {:?}", e); return; }
     };
-
     let addr = "0.0.0.0:9001";
     let listener = match TcpListener::bind(&addr).await {
         Ok(listener) => listener,
-        Err(e) => {
-            eprintln!("🔴 치명적 에러: TCP 리스너 바인딩 실패 ({}): {:?}", addr, e);
-            return;
-        }
+        Err(e) => { eprintln!("🔴 치명적 에러: TCP 리스너 바인딩 실패 ({}): {:?}", addr, e); return; }
     };
-    
     println!("🚀 WebSocket 서버가 다음 주소에서 실행을 시작합니다.");
 
+    // --- ✨ SIGHUP 신호 핸들러 추가 ---
+    let mut hup = signal(SignalKind::hangup()).expect("SIGHUP 핸들러 설치 실패");
+    
+    // --- 메인 루프 실행 ---
     loop {
         tokio::select! {
+            // 클라이언트 연결 수락
             result = listener.accept() => {
                 match result {
                     Ok((stream, _)) => {
@@ -40,17 +39,23 @@ async fn main() {
                         tokio::spawn(handle_connection(stream, client_clone));
                     }
                     Err(e) => {
-                        eprintln!("� 클라이언트 접속 수락(accept) 실패: {:?}", e);
+                        eprintln!("🔴 클라이언트 접속 수락(accept) 실패: {:?}", e);
                     }
                 }
             },
+            // Ctrl+C 종료 신호 감지
             _ = signal::ctrl_c() => {
                 println!("\nℹ️ Ctrl+C 신호 수신. 서버를 종료합니다.");
                 break;
+            },
+            // ✨ SIGHUP 신호를 받았을 때의 동작 추가
+            _ = hup.recv() => {
+                println!("🟡 SIGHUP 신호 수신, 무시하고 계속 실행합니다.");
             }
         }
     }
 }
+
 
 // ✨ handle_connection 함수의 루프 로직을 더 상세하게 수정합니다.
 async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
