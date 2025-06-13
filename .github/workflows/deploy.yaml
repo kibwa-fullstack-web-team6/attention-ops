@@ -1,57 +1,47 @@
-# .github/workflows/deploy.yml
-
-name: Docker CI/CD for Attention App (with Diagnostics)
+name: Docker CI/CD for Attention App
 
 on:
   push:
-    branches: [ "main" ] # 사용자님의 브랜치 이름 'main'으로 유지
+    branches:
+      
 
 jobs:
-  # 첫 번째 Job: Docker 이미지 빌드 및 푸시
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      # 1. 소스 코드 체크아웃
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # =======================================================
-      # ✨✨✨ 진단용 로그 추가 단계 ✨✨✨
-      # =======================================================
-      - name: 🧐 1. Verify Git Commit
-        run: |
-          echo ">>> LATEST COMMIT:"
-          git log -1
-
-      - name: 🧐 2. Verify File List
-        run: |
-          echo ">>> FILE LIST:"
-          ls -laR
-
-      - name: 🧐 3. Verify mainService.html content
-        run: |
-          echo ">>> mainService.html CONTENT:"
-          # 파일이 없을 경우 에러가 나지 않도록 || true 추가
-          cat nodejs/pages/mainService.html || true
-      # =======================================================
-
-      # 2. Docker Hub 로그인
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 3. Docker 이미지 빌드 및 푸시
-      - name: Build and push Docker image
+      - name: Build and push nodejs-app image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-app:latest
-          no-cache: true # Docker 빌드 캐시를 사용하지 않도록 설정
 
-  # 두 번째 Job: EC2에 배포
+      - name: Build and push websocket image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./websocket
+          file: ./websocket/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-websocket:latest
+
+      - name: Build and push datasaver image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./sessionDataSave 
+          file: ./sessionDataSave/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-data-saver:latest
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -59,14 +49,18 @@ jobs:
       - name: Deploy to EC2 instance
         uses: appleboy/ssh-action@v1.0.3
         with:
-          # 사용자님의 시크릿 이름으로 유지
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_KEY }}
           script: |
             cd /work/attention
-            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/attention-app:latest
+            DOCKERHUB_USER=${{ secrets.DOCKERHUB_USERNAME }}
+            
+            docker login -u $DOCKERHUB_USER -p ${{ secrets.DOCKERHUB_TOKEN }}
+            
+            docker pull $DOCKERHUB_USER/attention-app:latest
+            docker pull $DOCKERHUB_USER/attention-websocket:latest
+            docker pull $DOCKERHUB_USER/attention-data-saver:latest
             docker compose down
             docker compose build
-            docker compose up -d
+            docker compose up -d --remove-orphans
