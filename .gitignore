@@ -3,3 +3,9 @@
 nodejs/node_modules/*
 
 dataStorage
+
+
+
+## rust
+
+websocket/target/
