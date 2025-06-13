@@ -11,7 +11,7 @@ let lastDetectionTime = 0;
 const detectionInterval = 1000; // 1초마다 특징 추출
 
 // ✨ 1. WebSocket 관련 변수 추가
-const WEBSOCKET_URL = `ws://${window.location.hostname}:9001`; // 현재 접속한 주소의 9001 포트
+const WEBSOCKET_URL = `wss://${window.location.hostname}/ws`; // 443 포트를 사용하는 웹소켓 보안 프로토콜.
 let websocket;
 
 // 고유 세션 ID 생성
