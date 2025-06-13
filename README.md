@@ -52,10 +52,17 @@ Footer도 필요 없을 생략 가능합니다.
 ## 파일 / 폴더 / 코드 제작 규칙
 
 폴더명 : 모두 소문자 ex) artistelement
+
 파일명 : 파스칼 케이스 ex) ProfileContent.js
+
 클래스명 : 파스칼 케이스 ex) class ProfileContent
+
 컴포넌트명 : 파스칼 케이스 ex)
+
 함수 + 변수명 : 카멜 케이스 ex) fontSizeRules
+
 함수는 동사 형으로 작성하기 ex) checkLoginStatus = () =>
+
 변수는 명사 형으로 작성하기 ex) nameSet
+
 주석 : import 모듈 바로 아래 class 및 function 시작 바로 위에 작성
