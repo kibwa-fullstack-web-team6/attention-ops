@@ -1,47 +1,24 @@
 use std::env;
-use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use redis::AsyncCommands;
 use tokio::signal;
 
+// main 함수는 변경 없습니다.
 #[tokio::main]
 async fn main() {
-    // --- 1. 환경 변수 읽기 ---
     let redis_host = env::var("REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let redis_port = env::var("REDIS_PORT").unwrap_or_else(|_| "6379".to_string());
     let redis_url = format!("redis://{}:{}", redis_host, redis_port);
-    println!("ℹ️ 준비: Redis 접속 시도 -> {}", redis_url);
+    let redis_client = redis::Client::open(redis_url).expect("유효하지 않은 Redis URL입니다.");
 
-    // --- 2. Redis 클라이언트 생성 (에러 처리 추가) ---
-    let redis_client = match redis::Client::open(redis_url) {
-        Ok(client) => {
-            println!("✅ 준비: Redis 클라이언트 생성 성공");
-            client
-        },
-        Err(e) => {
-            eprintln!("🔴 치명적 에러: Redis 클라이언트 생성 실패: {:?}", e);
-            return; // 클라이언트 생성 실패 시 프로그램 종료
-        }
-    };
-
-    // --- 3. 웹소켓 서버 바인딩 (에러 처리 추가) ---
     let addr = "0.0.0.0:9001";
-    let listener = match TcpListener::bind(&addr).await {
-        Ok(listener) => {
-            println!("✅ 준비: TCP 리스너 바인딩 성공 -> {}", addr);
-            listener
-        },
-        Err(e) => {
-            eprintln!("🔴 치명적 에러: TCP 리스너 바인딩 실패 ({}): {:?}", addr, e);
-            return; // 바인딩 실패 시 프로그램 종료
-        }
-    };
-    
-    println!("🚀 WebSocket 서버가 다음 주소에서 실행을 시작합니다.");
+    let listener = TcpListener::bind(&addr).await.expect("바인딩 실패");
 
-    // --- 4. 메인 루프 실행 ---
+    println!("✅ WebSocket 서버가 다음 주소에서 실행 중입니다: {}", addr);
+    println!("🔌 Redis 접속 대상: {}:{}", redis_host, redis_port);
+
     loop {
         tokio::select! {
             result = listener.accept() => {
@@ -63,10 +40,10 @@ async fn main() {
     }
 }
 
-// 개별 클라이언트 연결을 처리하는 비동기 함수
+// ✨ handle_connection 함수만 이 코드로 교체해주세요.
 async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     let addr = stream.peer_addr().expect("연결된 스트림은 peer 주소를 가져야 합니다.");
-    
+
     let mut redis_conn = match redis_client.get_async_connection().await {
         Ok(conn) => conn,
         Err(e) => {
@@ -89,20 +66,27 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
 
     while let Some(msg) = read.next().await {
         if let Ok(Message::Text(text)) = msg {
+            println!("<- '{}'로부터 텍스트 수신: {}", addr, &text);
+            
             let channel = "attention-data";
-            let _: () = match redis_conn.publish(channel, &text).await {
-                Ok(_) => {
-                    // 클라이언트에 다시 메시지를 보내는 부분은 지금 중요하지 않으므로, 에러가 나도 무시하고 계속 진행
-                    let _ = write.send(Message::Text(format!("Echo: {}", text))).await;
-                    continue;
+            // ✨ 2. `publish`에 반환 타입을 명시적으로 알려줍니다.
+            match redis_conn.publish::<&str, &str, i64>(channel, &text).await {
+                Ok(subscribers_count) => {
+                    println!("-> '{}'의 메시지를 Redis 채널 '{}'에 발행 성공 ({}명 수신)", addr, channel, subscribers_count);
+                    // 에코 메시지 전송
+                    if write.send(Message::Text(format!("Echo: {}", text))).await.is_err() {
+                        break;
+                    }
                 },
                 Err(e) => {
                     eprintln!("🔴 '{}'의 메시지를 Redis에 발행 실패: {:?}", addr, e);
                     break;
                 }
             };
+        } else {
+            // 텍스트 메시지가 아니거나, 에러 발생 시 연결 종료
+            break;
         }
-        break; // Text 메시지가 아니거나, 에러 발생 시 루프 종료
     }
     println!("🔌 '{}' 와의 연결이 종료되었습니다.", addr);
 }
