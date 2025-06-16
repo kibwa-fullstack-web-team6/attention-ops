@@ -22,16 +22,13 @@ services:
     container_name: attention-data-saver
     image: hwengdeong/attention-data-saver:latest
     restart: always
+    env_file:
+      - ./.env
     networks:
       - attention-network
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - MONGO_HOST=${MONGO_HOST}
-      - MONGO_PORT=${MONGO_PORT}
-      - MONGO_USER=${MONGO_USER}
-      - MONGO_PASSWORD=${MONGO_PASSWORD}
-      - MONGO_DB_NAME=${MONGO_DB_NAME}
     volumes:
       - ./dataStorage:/app/saved_data
     depends_on:
