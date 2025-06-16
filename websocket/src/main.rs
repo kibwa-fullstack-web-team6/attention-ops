@@ -64,30 +64,41 @@ async fn handle_connection(stream: TcpStream) {
 
     let (mut write, mut read) = ws_stream.split();
 
-    while let Some(msg) = read.next().await {
-        if let Ok(Message::Text(text)) = msg {
-            println!("<-- '{}'로부터 텍스트 수신: {}", addr, text);
+    while let Some(msg_result) = read.next().await {
+        match msg_result {
+            Ok(Message::Text(text)) => {
+                println!("<-- '{}'로부터 텍스트 수신", addr);
 
-            // ✨ 오직 JSON 파싱만 시도하고 결과를 로그로 남깁니다.
-            let parsed: Result<ClientMessage, _> = serde_json::from_str(&text);
-            match parsed {
-                Ok(client_msg) => {
-                    // 파싱에 성공하면 성공 로그를 남깁니다.
-                    println!("✅ JSON 파싱 성공: {:?}", client_msg);
-                },
-                Err(e) => {
-                    // 파싱에 실패하면 에러 로그를 남깁니다.
-                    eprintln!("🔴 JSON 파싱 에러: {:?}, 원본: {}", e, text);
+                // ✨ 오직 JSON 파싱만 시도하고 결과를 로그로 남깁니다.
+                let parsed: Result<ClientMessage, _> = serde_json::from_str(&text);
+                match parsed {
+                    Ok(client_msg) => {
+                        // 파싱에 성공하면 성공 로그를 남깁니다.
+                        println!("✅ JSON 파싱 성공: {:?}", client_msg);
+                    },
+                    Err(e) => {
+                        // 파싱에 실패하면 에러 로그를 남깁니다.
+                        eprintln!("🔴 JSON 파싱 에러: {:?}, 원본: {}", e, text);
+                    }
                 }
-            }
-            
-            // 클라이언트에게 간단한 응답을 보내 연결을 유지합니다.
-            if write.send(Message::Text("Parsed".to_string())).await.is_err() {
+                
+                // 클라이언트에게 간단한 응답을 보내 연결을 유지합니다.
+                if write.send(Message::Text("Parsed".to_string())).await.is_err() {
+                    break;
+                }
+            },
+            Ok(Message::Close(_)) => {
+                println!("<- '{}'로부터 연결 종료 메시지 수신", addr);
+                break;
+            },
+            Ok(_) => {
+                // Binary, Ping, Pong 등 다른 메시지 타입은 무시하고 계속 진행
+                println!("<- '{}'로부터 다른 타입의 메시지 수신 (무시됨)", addr);
+            },
+            Err(e) => {
+                eprintln!("🔴 메시지 수신 중 에러 발생: {:?}", e);
                 break;
             }
-
-        } else if msg.is_close() {
-            break;
         }
     }
     println!("🔌 '{}' 와의 연결이 종료되었습니다.", addr);
