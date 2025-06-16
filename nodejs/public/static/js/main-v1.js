@@ -16,7 +16,7 @@ let websocket;
 
 // 고유 세션 및 사용자 ID 생성
 const SESSION_ID = crypto.randomUUID();
-const USER_ID = 1; // 임시 사용자 ID
+const USER_ID = "1"; // 임시 사용자 ID
 console.log(`🔵 새로운 세션이 시작되었습니다. Session ID: ${SESSION_ID}, User ID: ${USER_ID}`);
 
 // 특징 추출 헬퍼 함수
