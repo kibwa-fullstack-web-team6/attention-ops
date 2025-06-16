@@ -20,7 +20,7 @@ MONGO_DB_NAME = os.getenv('MONGO_DB_NAME')
 MONGO_URI = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
 
 
-if not all([MONGO_HOST, MONGO_PORT_STR, MONGO_USER, MONGO_PASSWORD, MONGO_DB_NAME]):
+if not all([MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_DB_NAME]):
     print("🔴 치명적 에러: MongoDB 접속을 위한 환경 변수가 모두 설정되지 않았습니다.")
     print("   (MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_DB_NAME)")
     sys.exit(1)
