@@ -32,8 +32,7 @@ services:
 
   websocket:
     container_name: attention-websocket
-    # image: hwengdeong/attention-websocket:latest  # <- 이 줄을 주석 처리하거나 삭제
-    build: .                                    # <- 이 줄을 추가 (Dockerfile이 현재 폴더에 있다고 가정)
+    image: hwengdeong/attention-websocket:latest  
     ports:
       - "9001:9001"
     restart: always
