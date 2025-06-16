@@ -9,3 +9,5 @@ dataStorage
 ## rust
 
 websocket/target/
+
+.env
