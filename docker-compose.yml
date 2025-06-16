@@ -29,6 +29,8 @@ services:
       - REDIS_PORT=6379
     volumes:
       - ./dataStorage:/app/saved_data
+    depends_on:
+      - redis
 
   websocket:
     container_name: attention-websocket
@@ -41,6 +43,8 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    depends_on:
+      - redis
 
 networks:
   attention-network:
