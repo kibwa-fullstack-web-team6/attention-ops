@@ -54,6 +54,11 @@ jobs:
           key: ${{ secrets.AWS_KEY }}
           script: |
             cd /work/attention
+            echo "MONGO_HOST=${{ secrets.MONGO_HOST }}" > .env
+            echo "MONGO_PORT=${{ secrets.MONGO_PORT }}" >> .env
+            echo "MONGO_USER=${{ secrets.MONGO_USER }}" >> .env
+            echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
+            echo "MONGO_DB_NAME=${{ secrets.MONGO_DB_NAME }}" >> .env
             DOCKERHUB_USER=${{ secrets.DOCKERHUB_USERNAME }}
             
             docker login -u $DOCKERHUB_USER -p ${{ secrets.DOCKERHUB_TOKEN }}
