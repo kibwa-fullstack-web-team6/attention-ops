@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::env;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
@@ -10,19 +10,11 @@ use tokio::signal::unix::{signal, SignalKind};
 use std::time::Duration;
 use tokio::time::interval;
 
-// --- 1. 데이터 구조체 정의 (새로운 payload 형식에 맞춤) ---
-
-#[derive(Deserialize, Debug, Clone, Copy)]
-struct Landmark {
-    index: u32,
-    x: f64,
-    y: f64,
-    z: f64,
-}
-
+// --- 데이터 구조체 정의 ---
 #[derive(Deserialize, Debug)]
 struct DataPayload {
-    landmarks: Vec<Landmark>,
+    ear_left: f64,
+    ear_right: f64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -37,30 +29,77 @@ struct ClientMessage {
     payload: Value,
 }
 
-// --- 2. 특징 계산을 위한 헬퍼 함수들 (Rust 버전) ---
-
-fn get_distance(p1: &Landmark, p2: &Landmark) -> f64 {
-    ((p1.x - p2.x).powi(2) + (p1.y - p2.y).powi(2)).sqrt()
-}
-
-fn get_ear(eye_landmarks: &[Landmark]) -> f64 {
-    let ver_dist1 = get_distance(&eye_landmarks[1], &eye_landmarks[5]);
-    let ver_dist2 = get_distance(&eye_landmarks[2], &eye_landmarks[4]);
-    let hor_dist = get_distance(&eye_landmarks[0], &eye_landmarks[3]);
-    (ver_dist1 + ver_dist2) / (2.0 * hor_dist)
-}
-
-// --- main 함수 (변경 없음) ---
+// --- main 함수 ---
 #[tokio::main]
-async fn main() { /* ... 이전과 동일 ... */ }
+async fn main() {
+    let redis_host = env::var("REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let redis_port = env::var("REDIS_PORT").unwrap_or_else(|_| "6379".to_string());
+    let redis_url = format!("redis://{}:{}", redis_host, redis_port);
 
-// --- 3. 개별 클라이언트 연결 처리 함수 (핵심 로직 수정) ---
+    let redis_client = match redis::Client::open(redis_url) {
+        Ok(client) => client,
+        Err(e) => { eprintln!("🔴 치명적 에러: Redis 클라이언트 생성 실패: {:?}", e); return; }
+    };
+
+    let addr = "0.0.0.0:9001";
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(e) => { eprintln!("🔴 치명적 에러: TCP 리스너 바인딩 실패 ({}): {:?}", addr, e); return; }
+    };
+    println!("🚀 WebSocket 서버가 다음 주소에서 실행을 시작합니다.");
+
+    let mut hup = signal(SignalKind::hangup()).expect("SIGHUP 핸들러 설치 실패");
+    
+    loop {
+        tokio::select! {
+            result = listener.accept() => {
+                if let Ok((stream, _)) = result {
+                    let client_clone = redis_client.clone();
+                    tokio::spawn(handle_connection(stream, client_clone));
+                }
+            },
+            _ = signal::ctrl_c() => {
+                println!("\nℹ️ Ctrl+C 신호 수신. 서버를 종료합니다.");
+                break;
+            },
+            _ = hup.recv() => {
+                println!("🟡 SIGHUP 신호 수신, 무시하고 계속 실행합니다.");
+            }
+        }
+    }
+}
+
+// --- 개별 클라이언트 연결 처리 함수 ---
 async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
-    // ... (상단 연결 코드는 동일) ...
+    let addr = match stream.peer_addr() {
+        Ok(addr) => addr,
+        Err(e) => { eprintln!("🔴 stream.peer_addr() 실패: {:?}", e); return; }
+    };
+    
+    let mut redis_conn = match redis_client.get_async_connection().await {
+        Ok(conn) => conn,
+        Err(e) => { eprintln!("🔴 Redis 연결 실패 ({}): {:?}", addr, e); return; }
+    };
+
+    let ws_stream = match accept_async(stream).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            // ✨✨✨ 핵심 변경점: 로그 레벨 조정 ✨✨✨
+            if let tokio_tungstenite::tungstenite::Error::Protocol(
+                tokio_tungstenite::tungstenite::error::ProtocolError::MissingConnectionUpgradeHeader
+            ) = e {
+                println!("ℹ️  ALB 상태 검사 요청 수신 (정상 동작)");
+            } else {
+                eprintln!("� 웹소켓 핸드셰이크 에러 ({}): {:?}", addr, e);
+            }
+            return;
+        }
+    };
+    println!("🚀 WebSocket 연결 성공: {}", addr);
+
     let (mut write, mut read) = ws_stream.split();
     let mut ping_interval = interval(Duration::from_secs(30));
 
-    // 각 클라이언트의 집중도 상태를 저장할 변수
     let mut consecutive_closed_eyes = 0;
     const EAR_THRESHOLD: f64 = 0.2;
     const CONSECUTIVE_FRAMES_TRIGGER: i32 = 2;
@@ -68,55 +107,37 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     loop {
         tokio::select! {
             msg_result = read.next() => {
-                // ... (메시지 수신 부분) ...
-                if let Message::Text(text) = msg {
-                    match serde_json::from_str::<ClientMessage>(&text) {
-                        Ok(client_msg) => {
+                let msg = match msg_result { Some(Ok(m)) => m, _ => break };
+
+                match msg {
+                    Message::Text(text) => {
+                        if redis_conn.publish::<_, _, i64>("attention-events", &text).await.is_err() {
+                            eprintln!("🔴 Redis 발행 실패");
+                        }
+                        if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
                             if client_msg.event_type == "data" {
                                 if let Ok(data_payload) = serde_json::from_value::<DataPayload>(client_msg.payload) {
-                                    
-                                    // 랜드마크를 인덱스로 빠르게 찾기 위해 HashMap으로 변환
-                                    let landmarks_map: HashMap<u32, Landmark> = 
-                                        data_payload.landmarks.iter().map(|&lm| (lm.index, lm)).collect();
-
-                                    // ✨ EAR 계산
-                                    let right_eye_indices = [33, 160, 158, 133, 153, 144];
-                                    let left_eye_indices = [362, 385, 387, 263, 373, 380];
-                                    
-                                    let right_eye_landmarks: Vec<Landmark> = right_eye_indices.iter().map(|&i| landmarks_map[&i]).collect();
-                                    let left_eye_landmarks: Vec<Landmark> = left_eye_indices.iter().map(|&i| landmarks_map[&i]).collect();
-
-                                    let ear_right = get_ear(&right_eye_landmarks);
-                                    let ear_left = get_ear(&left_eye_landmarks);
-
-                                    println!("<- [data] Server-side EAR: L={:.3}, R={:.3}", ear_left, ear_right);
-
-                                    // ✨ 집중도 분석 및 알람 로직
-                                    if ear_left < EAR_THRESHOLD && ear_right < EAR_THRESHOLD {
+                                    if data_payload.ear_left < EAR_THRESHOLD && data_payload.ear_right < EAR_THRESHOLD {
                                         consecutive_closed_eyes += 1;
                                     } else {
                                         consecutive_closed_eyes = 0;
                                     }
-
                                     if consecutive_closed_eyes >= CONSECUTIVE_FRAMES_TRIGGER {
-                                        let alarm_msg = "Drowsiness Detected on Server!";
-                                        println!("🚨 서버 기반 알람 전송! -> {}", addr);
+                                        let alarm_msg = "Drowsiness Detected!";
                                         if write.send(Message::Text(alarm_msg.to_string())).await.is_err() { break; }
                                         consecutive_closed_eyes = 0;
                                     }
-
-                                    // ✨ 나중에 여기에 head_pose, mar 계산 로직 추가...
                                 }
                             }
-                            // 받은 원본 메시지를 Redis에 발행
-                            let _ = redis_conn.publish::<_, _, i64>("attention-events", &text).await;
-                        },
-                        Err(e) => { /* ... */ }
-                    }
+                        }
+                    },
+                    Message::Close(_) => break,
+                    _ => { /* 다른 메시지 타입은 무시 */ }
                 }
-                // ... (이하 로직 동일) ...
             },
-            _ = ping_interval.tick() => { /* ... */ }
+            _ = ping_interval.tick() => {
+                if write.send(Message::Ping(vec![])).await.is_err() { break; }
+            }
         }
     }
     println!("🔌 '{}' 와의 연결이 종료되었습니다.", addr);
