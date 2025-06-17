@@ -15,14 +15,12 @@ use chrono::Utc;
 // --- 데이터 구조체 정의 ---
 #[derive(Deserialize, Debug, Clone, Copy)]
 struct Landmark { index: u32, x: f64, y: f64, z: f64 }
-
 #[derive(Deserialize, Debug)]
 struct DataPayload { landmarks: Vec<Landmark> }
-
 #[derive(Deserialize, Debug)]
 struct StatusPayload { status: String }
 
-// ✨ ClientMessage 구조체에 Clone 기능을 추가합니다.
+// ✨ 1. ClientMessage 구조체에 Clone 기능을 추가합니다.
 #[derive(Deserialize, Debug, Clone)]
 struct ClientMessage {
     #[serde(rename = "sessionId")]
@@ -46,11 +44,13 @@ struct ServerEvent<'a> {
     payload: Value,
 }
 
-// --- 헬퍼 함수들 (변경 없음) ---
+
+// --- 특징 계산 헬퍼 함수들 (변경 없음) ---
 fn get_distance(p1: &Landmark, p2: &Landmark) -> f64 { ((p1.x - p2.x).powi(2) + (p1.y - p2.y).powi(2)).sqrt() }
 fn get_ear(eye_landmarks: &[Landmark]) -> f64 { let ver_dist1 = get_distance(&eye_landmarks[1], &eye_landmarks[5]); let ver_dist2 = get_distance(&eye_landmarks[2], &eye_landmarks[4]); let hor_dist = get_distance(&eye_landmarks[0], &eye_landmarks[3]); if hor_dist == 0.0 { return 0.0; } (ver_dist1 + ver_dist2) / (2.0 * hor_dist) }
 fn get_mar(mouth_landmarks: &[Landmark]) -> f64 { let ver_dist1 = get_distance(&mouth_landmarks[2], &mouth_landmarks[5]); let ver_dist2 = get_distance(&mouth_landmarks[3], &mouth_landmarks[6]); let ver_dist3 = get_distance(&mouth_landmarks[4], &mouth_landmarks[7]); let hor_dist = get_distance(&mouth_landmarks[0], &mouth_landmarks[1]); if hor_dist == 0.0 { return 0.0; } (ver_dist1 + ver_dist2 + ver_dist3) / (3.0 * hor_dist) }
 fn get_head_yaw(landmarks_map: &HashMap<u32, Landmark>) -> f64 { if let (Some(&nose), Some(&left_cheek), Some(&right_cheek)) = (landmarks_map.get(&1), landmarks_map.get(&234), landmarks_map.get(&454)) { let dist_left = (nose.x - left_cheek.x).abs(); let dist_right = (right_cheek.x - nose.x).abs(); if (dist_left + dist_right) == 0.0 { return 0.0; } (dist_right - dist_left) / (dist_left + dist_right) } else { 0.0 } }
+
 
 // --- main 함수 (변경 없음) ---
 #[tokio::main]
@@ -74,7 +74,13 @@ async fn main() {
 
 // 클라이언트의 집중도 상태를 추적하기 위한 enum
 #[derive(PartialEq, Debug, Clone, Copy)]
-enum AttentionState { Focused, Drowsy, Distracted, UserLeft }
+enum AttentionState {
+    Focused,
+    Drowsy,
+    Distracted,
+    UserLeft,
+    Paused, // 사용자가 직접 일시정지한 상태
+}
 
 // --- 개별 클라이언트 연결 처리 함수 ---
 async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
@@ -82,16 +88,25 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     let mut redis_conn = match redis_client.get_async_connection().await { Ok(conn) => conn, Err(_) => return };
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
-        Err(_) => { return; }
+        Err(e) => {
+            if let tokio_tungstenite::tungstenite::Error::Protocol(tokio_tungstenite::tungstenite::error::ProtocolError::MissingConnectionUpgradeHeader) = e {
+                println!("ℹ️  ALB Health Check received (normal behavior)");
+            } else {
+                eprintln!("🔴 WebSocket handshake error ({}): {:?}", addr, e);
+            }
+            return;
+        }
     };
     println!("🚀 WebSocket connection established: {}", addr);
 
     let (mut write, mut read) = ws_stream.split();
     let mut ping_interval = interval(Duration::from_secs(30));
+
     let mut current_state = AttentionState::Focused;
     let mut state_changed_at = Instant::now();
+
     const EAR_THRESHOLD: f64 = 0.21;
-    const MAR_THRESHOLD: f64 = 0.45;
+    const MAR_THRESHOLD: f64 = 0.6;
     const YAW_THRESHOLD: f64 = 0.3;
     const CONSECUTIVE_FRAMES_TRIGGER: u64 = 3;
 
@@ -102,6 +117,12 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
 
                 if let Message::Text(text) = msg {
                     if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
+                        
+                        // 현재 상태가 '일시정지'이면, 데이터 분석을 건너뜁니다.
+                        if current_state == AttentionState::Paused && client_msg.event_type == "data" {
+                            let _ = redis_conn.publish::<_, _, i64>("attention-events", &text).await;
+                            continue;
+                        }
                         
                         let mut new_state = current_state;
                         
@@ -129,8 +150,16 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
                                     }
                                 }
                             },
-                            "status_update" => { new_state = AttentionState::UserLeft; },
-                            // ✨ payload를 .clone()하여 소유권을 넘기지 않고 복사본을 전달합니다.
+                            "status_update" => {
+                                if let Ok(status_payload) = serde_json::from_value::<StatusPayload>(client_msg.payload.clone()) {
+                                    match status_payload.status.as_str() {
+                                        "no_face_detected" => new_state = AttentionState::UserLeft,
+                                        "paused" => new_state = AttentionState::Paused,
+                                        "resumed" => new_state = AttentionState::Focused,
+                                        _ => {}
+                                    }
+                                }
+                            },
                             "start" => { create_and_publish_event(&mut redis_conn, &client_msg, "SESSION_START", client_msg.payload.clone()).await; continue; },
                             "end" => { create_and_publish_event(&mut redis_conn, &client_msg, "SESSION_END", client_msg.payload.clone()).await; break; },
                             _ => {}
@@ -138,17 +167,27 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
 
                         if new_state != current_state {
                             let duration_ms = state_changed_at.elapsed().as_millis();
-                            let event_type = match new_state {
-                                AttentionState::Focused => "FOCUS_RESTORED",
-                                AttentionState::Drowsy => "DROWSINESS_STARTED",
-                                AttentionState::Distracted => "DISTRACTION_STARTED",
-                                AttentionState::UserLeft => "USER_LEFT",
+
+                            // 이전 상태(current_state)와 새로운 상태(new_state)를 모두 고려하여 이벤트 타입을 결정
+                            let event_type = match (current_state, new_state) {
+                                // '일시정지'에서 '집중'으로 돌아왔을 때
+                                (AttentionState::Paused, AttentionState::Focused) => "SESSION_RESUMED",
+                                // 다른 어떤 상태에서 '집중'으로 돌아왔을 때
+                                (_, AttentionState::Focused) => "FOCUS_RESTORED",
+                                // 다른 어떤 상태에서 '일시정지'가 되었을 때
+                                (_, AttentionState::Paused) => "SESSION_PAUSED",
+                                (_, AttentionState::Drowsy) => "DROWSINESS_STARTED",
+                                (_, AttentionState::Distracted) => "DISTRACTION_STARTED",
+                                (_, AttentionState::UserLeft) => "USER_LEFT",
                             };
+
+                            // 이전 상태가 얼마나 지속되었는지에 대한 정보를 포함하여 이벤트 발행
                             create_and_publish_event(&mut redis_conn, &client_msg, event_type, json!({ "previousStateDurationMs": duration_ms })).await;
                             
                             current_state = new_state;
                             state_changed_at = Instant::now();
 
+                            // 알람은 Paused 상태에서는 보내지 않음
                             let alarm_msg = match new_state {
                                 AttentionState::Drowsy => "Drowsiness Detected!",
                                 AttentionState::Distracted => "Distracted! Please focus.",
