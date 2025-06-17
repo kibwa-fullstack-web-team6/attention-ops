@@ -17,7 +17,6 @@ let websocket;
 // 고유 세션 및 사용자 ID 생성
 const SESSION_ID = crypto.randomUUID();
 const USER_ID = "1"; // 임시 사용자 ID
-console.log(`🔵 새로운 세션이 시작되었습니다. Session ID: ${SESSION_ID}, User ID: ${USER_ID}`);
 
 // ✨ 1. 서버로 전송할 핵심 랜드마크 인덱스 목록 정의
 const KEY_LANDMARK_INDICES = [
@@ -33,8 +32,6 @@ const KEY_LANDMARK_INDICES = [
 
 
 // ✨ 2. 특징 추출 헬퍼 함수들은 더 이상 클라이언트에서 필요 없으므로 삭제합니다.
-// function getDistance(...) 삭제
-// function getEAR(...) 삭제
 
 
 // MediaPipe FaceMesh 설정
@@ -52,22 +49,21 @@ function onResults(results) {
         const allLandmarks = results.multiFaceLandmarks[0];
 
         // 478개의 랜드마크 중에서, 우리가 정의한 핵심 랜드마크만 필터링합니다.
-        const keyLandmarks = allLandmarks.map((landmark, index) => ({...landmark, index}))
-                                         .filter(landmark => KEY_LANDMARK_INDICES.includes(landmark.index));
-
-        // 소수점 4자리까지만 정제하여 데이터 크기를 최적화합니다.
-        const refinedLandmarks = keyLandmarks.map(lm => ({
-            index: lm.index,
-            x: parseFloat(lm.x.toFixed(4)),
-            y: parseFloat(lm.y.toFixed(4)),
-            z: parseFloat(lm.z.toFixed(4)),
-        }));
+        const keyLandmarks = KEY_LANDMARK_INDICES.map(index => {
+            const landmark = allLandmarks[index];
+            return {
+                index: index,
+                x: parseFloat(landmark.x.toFixed(4)),
+                y: parseFloat(landmark.y.toFixed(4)),
+                z: parseFloat(landmark.z.toFixed(4)),
+            };
+        });
 
         // 'data' 이벤트의 payload에 정제된 랜드마크 배열을 담아 전송합니다.
         sendEvent('data', {
-            landmarks: refinedLandmarks
+            landmarks: keyLandmarks
         });
-        statusElement.textContent = `🟢 ${refinedLandmarks.length}개의 핵심 랜드마크 데이터 전송 중...`;
+        statusElement.textContent = `🟢 ${keyLandmarks.length}개의 핵심 랜드마크 데이터 전송 중...`;
 
     } else {
         // 얼굴이 인식되지 않았을 때: 'status_update' 이벤트 전송
@@ -79,9 +75,12 @@ function onResults(results) {
     canvasCtx.restore();
 }
 
-// 모든 이벤트를 보내는 범용 함수 (기존과 동일)
+// 모든 이벤트를 보내는 범용 함수
 function sendEvent(eventType, payload) {
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) { return; }
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+        return; 
+    }
+    
     const message = {
         sessionId: SESSION_ID,
         userId: USER_ID,
@@ -92,7 +91,7 @@ function sendEvent(eventType, payload) {
     websocket.send(JSON.stringify(message));
 }
 
-// WebSocket 연결 및 관리 함수 (기존과 동일)
+// WebSocket 연결 및 관리 함수
 function connectWebSocket() {
     console.log(`🟡 WebSocket 연결 시도.`);
     websocket = new WebSocket(WEBSOCKET_URL);
@@ -117,16 +116,53 @@ function connectWebSocket() {
 
 
 // --- 나머지 초기화 함수들은 변경 없습니다 ---
-async function initializeWebcamAndMediaPipeProcessing() { /* ... */ }
-async function sendFramesToMediaPipe() { /* ... */ }
-async function initializeMediaPipe() { /* ... */ }
+async function initializeWebcamAndMediaPipeProcessing() {
+    console.log("🟢 웹캠 초기화 시작.");
+    statusElement.textContent = "웹캠 활성화 요청 중...";
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        videoElement.srcObject = stream;
+        videoElement.onloadedmetadata = () => {
+            videoElement.play();
+            videoElement.style.display = "block";
+        };
+        videoElement.addEventListener("playing", () => {
+            console.log("🟢 비디오 재생 시작됨.");
+            isVideoPlaying = true;
+            if (isFaceMeshInitialized) { sendFramesToMediaPipe(); }
+        }, { once: true });
+    } catch (error) { console.error("🔴 웹캠 활성화 실패:", error); }
+}
+
+async function sendFramesToMediaPipe() {
+    if (!isFaceMeshInitialized || !isVideoPlaying || videoElement.paused || videoElement.ended) return;
+    const now = performance.now();
+    if (now - lastDetectionTime >= detectionInterval) {
+        if (videoElement.videoWidth > 0) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            await faceMesh.send({ image: videoElement });
+            lastDetectionTime = now;
+        }
+    }
+    setTimeout(sendFramesToMediaPipe, 100);
+}
+
+async function initializeMediaPipe() {
+    console.log("🟢 MediaPipe 초기화 시작.");
+    await faceMesh.initialize();
+    isFaceMeshInitialized = true;
+    console.log("🟢 MediaPipe 모델 초기화 완료.");
+    if (isVideoPlaying) { sendFramesToMediaPipe(); }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     console.log("🟢 DOMContentLoaded: 페이지 로드 완료.");
     setTimeout(connectWebSocket, 0);
     setTimeout(initializeWebcamAndMediaPipeProcessing, 0);
     setTimeout(initializeMediaPipe, 0);
 });
+
 window.addEventListener('beforeunload', (event) => {
     sendEvent('end', { reason: 'user_closed_tab' });
 });
-
