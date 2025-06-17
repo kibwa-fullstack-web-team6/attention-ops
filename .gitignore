@@ -11,3 +11,5 @@ dataStorage
 websocket/target/
 
 .env
+
+docker-compose.yml
