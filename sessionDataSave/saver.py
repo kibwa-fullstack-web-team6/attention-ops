@@ -64,7 +64,7 @@ def main():
 
     # Redis 채널 구독
     pubsub = redis_client.pubsub()
-    CHANNELS = ['attention-events'] # 이제 모든 이벤트는 이 단일 채널을 통해 들어옵니다.
+    CHANNELS = ['attention-meaningful-events'] # 이제 모든 이벤트는 이 단일 채널을 통해 들어옵니다.
     pubsub.subscribe(*CHANNELS)
     print(f"📢 다음 채널을 구독합니다: {CHANNELS}")
     print("--- 데이터 수신 대기 중... ---")
