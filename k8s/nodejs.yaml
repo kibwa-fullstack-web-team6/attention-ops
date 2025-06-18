@@ -26,7 +26,7 @@ kind: Service
 metadata:
   name: node-app-service
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: node-app
   ports:
