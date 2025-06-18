@@ -53,7 +53,7 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_KEY }}
           script: |
-            cd /work/attention
+            cd /tmp/attention-ops
             echo "MONGO_HOST=${{ secrets.MONGO_HOST }}" > .env
             echo "MONGO_PORT=${{ secrets.MONGO_PORT }}" >> .env
             echo "MONGO_USER=${{ secrets.MONGO_USER }}" >> .env
