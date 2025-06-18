@@ -4,7 +4,7 @@ metadata:
   name: mongodb-secret # Secret의 이름
 type: Opaque # 기본 Secret 유형
 data:
-  MONGO_USERNAME: cm9vdA==
+  MONGO_USER: cm9vdA==
   MONGO_PASSWORD: cGFzc3dvcmQ=
 
 ---
