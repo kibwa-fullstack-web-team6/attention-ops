@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret # Secret의 이름
+type: Opaque # 기본 Secret 유형
+data:
+  MONGO_USERNAME: cm9vdA==
+  MONGO_PASSWORD: cGFzc3dvcmQ=
+
+---
+# 2. ConfigMap: 일반 설정 정보
+# 이 ConfigMap은 환경마다 달라질 수 있는 설정 값들을 코드와 분리하기 위해 사용합니다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-saver-configmap # ConfigMap의 이름
+data:
+  # Redis 호스트: 쿠버네티스 내부에서는 Service 이름을 DNS처럼 사용할 수 있습니다.
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+
+  # MongoDB 호스트: k8s 클러스터 외부의 node17 EC2를 가리켜야 합니다.
+  # 보안을 위해 Public IP 대신 Private IP 사용을 권장합니다.
+  MONGO_HOST: 172.31.17.44 # 여기에 node17 EC2의 Private IP 주소를 입력하세요.
+  MONGO_PORT: "27017"
+  MONGO_DB_NAME: "attention_db"
+
+---
+# 3. Deployment: 애플리케이션 배포 명세
+# Deployment는 우리 애플리케이션(Pod)이 항상 정상적으로 실행되도록 상태를 관리합니다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-saver-deployment
+spec:
+  replicas: 1 # 우선 1개의 파드만 실행합니다.
+  selector:
+    matchLabels:
+      app: session-data-saver
+  template: # 여기부터가 실제 파드(컨테이너)에 대한 정의입니다.
+    metadata:
+      labels:
+        app: session-data-saver
+    spec:
+      containers:
+        - name: session-data-saver-container
+          # 이 이미지는 Docker Hub에 푸시된 배포용 이미지를 사용해야 합니다.
+          image: "hwengdeong/attention-data-saver:latest" # Docker Hub 사용자명/이미지명:태그 형식으로 입력
+          imagePullPolicy: Always
+          
+          # envFrom을 사용하여 Secret과 ConfigMap의 모든 키-값 쌍을
+          # 컨테이너의 환경 변수로 주입합니다.
+          envFrom:
+            - secretRef:
+                name: mongodb-secret
+            - configMapRef:
+                name: data-saver-configmap
