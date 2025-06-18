@@ -1,5 +1,6 @@
-use serde::Deserialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::env;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
@@ -7,132 +8,195 @@ use futures_util::{StreamExt, SinkExt};
 use redis::AsyncCommands;
 use tokio::signal;
 use tokio::signal::unix::{signal, SignalKind};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::interval;
+use chrono::Utc;
 
 // --- 데이터 구조체 정의 ---
+#[derive(Deserialize, Debug, Clone, Copy)]
+struct Landmark { index: u32, x: f64, y: f64, z: f64 }
 #[derive(Deserialize, Debug)]
-struct DataPayload {
-    ear_left: f64,
-    ear_right: f64,
-}
+struct DataPayload { landmarks: Vec<Landmark> }
+#[derive(Deserialize, Debug)]
+struct StatusPayload { status: String }
 
-#[derive(Deserialize, Debug)]
+// ✨ 1. ClientMessage 구조체에 Clone 기능을 추가합니다.
+#[derive(Deserialize, Debug, Clone)]
 struct ClientMessage {
     #[serde(rename = "sessionId")]
     session_id: String,
     #[serde(rename = "userId")]
     user_id: String,
-    timestamp: String,
     #[serde(rename = "eventType")]
     event_type: String,
     payload: Value,
 }
 
-// --- main 함수 ---
+#[derive(Serialize, Debug)]
+struct ServerEvent<'a> {
+    #[serde(rename = "sessionId")]
+    session_id: &'a str,
+    #[serde(rename = "userId")]
+    user_id: &'a str,
+    timestamp: String,
+    #[serde(rename = "eventType")]
+    event_type: &'a str,
+    payload: Value,
+}
+
+
+// --- 특징 계산 헬퍼 함수들 (변경 없음) ---
+fn get_distance(p1: &Landmark, p2: &Landmark) -> f64 { ((p1.x - p2.x).powi(2) + (p1.y - p2.y).powi(2)).sqrt() }
+fn get_ear(eye_landmarks: &[Landmark]) -> f64 { let ver_dist1 = get_distance(&eye_landmarks[1], &eye_landmarks[5]); let ver_dist2 = get_distance(&eye_landmarks[2], &eye_landmarks[4]); let hor_dist = get_distance(&eye_landmarks[0], &eye_landmarks[3]); if hor_dist == 0.0 { return 0.0; } (ver_dist1 + ver_dist2) / (2.0 * hor_dist) }
+fn get_mar(mouth_landmarks: &[Landmark]) -> f64 { let ver_dist1 = get_distance(&mouth_landmarks[2], &mouth_landmarks[5]); let ver_dist2 = get_distance(&mouth_landmarks[3], &mouth_landmarks[6]); let ver_dist3 = get_distance(&mouth_landmarks[4], &mouth_landmarks[7]); let hor_dist = get_distance(&mouth_landmarks[0], &mouth_landmarks[1]); if hor_dist == 0.0 { return 0.0; } (ver_dist1 + ver_dist2 + ver_dist3) / (3.0 * hor_dist) }
+fn get_head_yaw(landmarks_map: &HashMap<u32, Landmark>) -> f64 { if let (Some(&nose), Some(&left_cheek), Some(&right_cheek)) = (landmarks_map.get(&1), landmarks_map.get(&234), landmarks_map.get(&454)) { let dist_left = (nose.x - left_cheek.x).abs(); let dist_right = (right_cheek.x - nose.x).abs(); if (dist_left + dist_right) == 0.0 { return 0.0; } (dist_right - dist_left) / (dist_left + dist_right) } else { 0.0 } }
+
+
+// --- main 함수 (변경 없음) ---
 #[tokio::main]
 async fn main() {
     let redis_host = env::var("REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let redis_port = env::var("REDIS_PORT").unwrap_or_else(|_| "6379".to_string());
     let redis_url = format!("redis://{}:{}", redis_host, redis_port);
-
-    let redis_client = match redis::Client::open(redis_url) {
-        Ok(client) => client,
-        Err(e) => { eprintln!("🔴 치명적 에러: Redis 클라이언트 생성 실패: {:?}", e); return; }
-    };
-
+    let redis_client = match redis::Client::open(redis_url) { Ok(client) => client, Err(e) => { eprintln!("🔴 Redis client creation failed: {:?}", e); return; } };
     let addr = "0.0.0.0:9001";
-    let listener = match TcpListener::bind(&addr).await {
-        Ok(listener) => listener,
-        Err(e) => { eprintln!("🔴 치명적 에러: TCP 리스너 바인딩 실패 ({}): {:?}", addr, e); return; }
-    };
-    println!("🚀 WebSocket 서버가 다음 주소에서 실행을 시작합니다.");
-
-    let mut hup = signal(SignalKind::hangup()).expect("SIGHUP 핸들러 설치 실패");
-    
+    let listener = match TcpListener::bind(&addr).await { Ok(listener) => listener, Err(e) => { eprintln!("🔴 TCP listener bind failed: {:?}", e); return; } };
+    println!("🚀 WebSocket server starting...");
+    let mut hup = signal(SignalKind::hangup()).expect("Failed to install SIGHUP handler");
     loop {
         tokio::select! {
-            result = listener.accept() => {
-                if let Ok((stream, _)) = result {
-                    let client_clone = redis_client.clone();
-                    tokio::spawn(handle_connection(stream, client_clone));
-                }
-            },
-            _ = signal::ctrl_c() => {
-                println!("\nℹ️ Ctrl+C 신호 수신. 서버를 종료합니다.");
-                break;
-            },
-            _ = hup.recv() => {
-                println!("🟡 SIGHUP 신호 수신, 무시하고 계속 실행합니다.");
-            }
+            result = listener.accept() => { if let Ok((stream, _)) = result { let client_clone = redis_client.clone(); tokio::spawn(handle_connection(stream, client_clone)); } },
+            _ = signal::ctrl_c() => { println!("\nℹ️ Ctrl+C received, shutting down."); break; },
+            _ = hup.recv() => { println!("🟡 SIGHUP received, ignoring."); }
         }
     }
 }
 
+// 클라이언트의 집중도 상태를 추적하기 위한 enum
+#[derive(PartialEq, Debug, Clone, Copy)]
+enum AttentionState {
+    Focused,
+    Drowsy,
+    Distracted,
+    UserLeft,
+    Paused, // 사용자가 직접 일시정지한 상태
+}
+
 // --- 개별 클라이언트 연결 처리 함수 ---
 async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
-    let addr = match stream.peer_addr() {
-        Ok(addr) => addr,
-        Err(e) => { eprintln!("🔴 stream.peer_addr() 실패: {:?}", e); return; }
-    };
-    
-    let mut redis_conn = match redis_client.get_async_connection().await {
-        Ok(conn) => conn,
-        Err(e) => { eprintln!("🔴 Redis 연결 실패 ({}): {:?}", addr, e); return; }
-    };
-
+    let addr = match stream.peer_addr() { Ok(addr) => addr, Err(_) => return };
+    let mut redis_conn = match redis_client.get_async_connection().await { Ok(conn) => conn, Err(_) => return };
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
-            // ✨✨✨ 핵심 변경점: 로그 레벨 조정 ✨✨✨
-            if let tokio_tungstenite::tungstenite::Error::Protocol(
-                tokio_tungstenite::tungstenite::error::ProtocolError::MissingConnectionUpgradeHeader
-            ) = e {
-                println!("ℹ️  ALB 상태 검사 요청 수신 (정상 동작)");
+            if let tokio_tungstenite::tungstenite::Error::Protocol(tokio_tungstenite::tungstenite::error::ProtocolError::MissingConnectionUpgradeHeader) = e {
+                println!("ℹ️  ALB Health Check received (normal behavior)");
             } else {
-                eprintln!("� 웹소켓 핸드셰이크 에러 ({}): {:?}", addr, e);
+                eprintln!("🔴 WebSocket handshake error ({}): {:?}", addr, e);
             }
             return;
         }
     };
-    println!("🚀 WebSocket 연결 성공: {}", addr);
+    println!("🚀 WebSocket connection established: {}", addr);
 
     let (mut write, mut read) = ws_stream.split();
     let mut ping_interval = interval(Duration::from_secs(30));
 
-    let mut consecutive_closed_eyes = 0;
-    const EAR_THRESHOLD: f64 = 0.2;
-    const CONSECUTIVE_FRAMES_TRIGGER: i32 = 2;
+    let mut current_state = AttentionState::Focused;
+    let mut state_changed_at = Instant::now();
+
+    const EAR_THRESHOLD: f64 = 0.21;
+    const MAR_THRESHOLD: f64 = 0.6;
+    const YAW_THRESHOLD: f64 = 0.3;
+    const CONSECUTIVE_FRAMES_TRIGGER: u64 = 3;
 
     loop {
         tokio::select! {
             msg_result = read.next() => {
                 let msg = match msg_result { Some(Ok(m)) => m, _ => break };
 
-                match msg {
-                    Message::Text(text) => {
-                        if redis_conn.publish::<_, _, i64>("attention-events", &text).await.is_err() {
-                            eprintln!("🔴 Redis 발행 실패");
+                if let Message::Text(text) = msg {
+                    if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
+                        
+                        // 현재 상태가 '일시정지'이면, 데이터 분석을 건너뜁니다.
+                        if current_state == AttentionState::Paused && client_msg.event_type == "data" {
+                            let _ = redis_conn.publish::<_, _, i64>("attention-events", &text).await;
+                            continue;
                         }
-                        if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                            if client_msg.event_type == "data" {
-                                if let Ok(data_payload) = serde_json::from_value::<DataPayload>(client_msg.payload) {
-                                    if data_payload.ear_left < EAR_THRESHOLD && data_payload.ear_right < EAR_THRESHOLD {
-                                        consecutive_closed_eyes += 1;
+                        
+                        let mut new_state = current_state;
+                        
+                        match client_msg.event_type.as_str() {
+                            "data" => {
+                                if let Ok(data_payload) = serde_json::from_value::<DataPayload>(client_msg.payload.clone()) {
+                                    let landmarks_map: HashMap<u32, Landmark> = 
+                                        data_payload.landmarks.iter().map(|&lm| (lm.index, lm)).collect();
+                                    
+                                    let ear_left = get_ear(&get_landmarks_by_indices(&landmarks_map, &[362, 385, 387, 263, 373, 380]));
+                                    let ear_right = get_ear(&get_landmarks_by_indices(&landmarks_map, &[33, 160, 158, 133, 153, 144]));
+                                    let mar = get_mar(&get_landmarks_by_indices(&landmarks_map, &[61, 291, 13, 81, 178, 14, 311, 402]));
+                                    let head_yaw = get_head_yaw(&landmarks_map);
+                                    
+                                    new_state = if ear_left < EAR_THRESHOLD && ear_right < EAR_THRESHOLD {
+                                        AttentionState::Drowsy
+                                    } else if head_yaw.abs() > YAW_THRESHOLD {
+                                        AttentionState::Distracted
                                     } else {
-                                        consecutive_closed_eyes = 0;
-                                    }
-                                    if consecutive_closed_eyes >= CONSECUTIVE_FRAMES_TRIGGER {
-                                        let alarm_msg = "Drowsiness Detected!";
-                                        if write.send(Message::Text(alarm_msg.to_string())).await.is_err() { break; }
-                                        consecutive_closed_eyes = 0;
+                                        AttentionState::Focused
+                                    };
+                                    
+                                    if mar > MAR_THRESHOLD {
+                                        create_and_publish_event(&mut redis_conn, &client_msg, "YAWN_DETECTED", json!({})).await;
                                     }
                                 }
-                            }
+                            },
+                            "status_update" => {
+                                if let Ok(status_payload) = serde_json::from_value::<StatusPayload>(client_msg.payload.clone()) {
+                                    match status_payload.status.as_str() {
+                                        "no_face_detected" => new_state = AttentionState::UserLeft,
+                                        "paused" => new_state = AttentionState::Paused,
+                                        "resumed" => new_state = AttentionState::Focused,
+                                        _ => {}
+                                    }
+                                }
+                            },
+                            "start" => { create_and_publish_event(&mut redis_conn, &client_msg, "SESSION_START", client_msg.payload.clone()).await; continue; },
+                            "end" => { create_and_publish_event(&mut redis_conn, &client_msg, "SESSION_END", client_msg.payload.clone()).await; break; },
+                            _ => {}
                         }
-                    },
-                    Message::Close(_) => break,
-                    _ => { /* 다른 메시지 타입은 무시 */ }
+
+                        if new_state != current_state {
+                            let duration_ms = state_changed_at.elapsed().as_millis();
+
+                            // 이전 상태(current_state)와 새로운 상태(new_state)를 모두 고려하여 이벤트 타입을 결정
+                            let event_type = match (current_state, new_state) {
+                                // '일시정지'에서 '집중'으로 돌아왔을 때
+                                (AttentionState::Paused, AttentionState::Focused) => "SESSION_RESUMED",
+                                // 다른 어떤 상태에서 '집중'으로 돌아왔을 때
+                                (_, AttentionState::Focused) => "FOCUS_RESTORED",
+                                // 다른 어떤 상태에서 '일시정지'가 되었을 때
+                                (_, AttentionState::Paused) => "SESSION_PAUSED",
+                                (_, AttentionState::Drowsy) => "DROWSINESS_STARTED",
+                                (_, AttentionState::Distracted) => "DISTRACTION_STARTED",
+                                (_, AttentionState::UserLeft) => "USER_LEFT",
+                            };
+
+                            // 이전 상태가 얼마나 지속되었는지에 대한 정보를 포함하여 이벤트 발행
+                            create_and_publish_event(&mut redis_conn, &client_msg, event_type, json!({ "previousStateDurationMs": duration_ms })).await;
+                            
+                            current_state = new_state;
+                            state_changed_at = Instant::now();
+
+                            // 알람은 Paused 상태에서는 보내지 않음
+                            let alarm_msg = match new_state {
+                                AttentionState::Drowsy => "Drowsiness Detected!",
+                                AttentionState::Distracted => "Distracted! Please focus.",
+                                AttentionState::UserLeft => "Are you there? Face not detected.",
+                                _ => ""
+                            };
+                            if !alarm_msg.is_empty() { send_alarm(&mut write, alarm_msg).await; }
+                        }
+                    }
                 }
             },
             _ = ping_interval.tick() => {
@@ -141,4 +205,35 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
         }
     }
     println!("🔌 '{}' 와의 연결이 종료되었습니다.", addr);
+}
+
+// 헬퍼 함수들
+async fn create_and_publish_event(
+    redis_conn: &mut redis::aio::Connection,
+    original_msg: &ClientMessage,
+    event_type: &str,
+    payload: Value,
+) {
+    let event = ServerEvent {
+        session_id: &original_msg.session_id,
+        user_id: &original_msg.user_id,
+        timestamp: Utc::now().to_rfc3339(),
+        event_type,
+        payload,
+    };
+    if let Ok(event_json) = serde_json::to_string(&event) {
+        println!("-> [발행] eventType: '{}'", event.event_type);
+        if redis_conn.publish::<_, _, i64>("attention-meaningful-events", &event_json).await.is_err() {
+            eprintln!("🔴 Redis 발행 실패");
+        }
+    }
+}
+
+fn get_landmarks_by_indices(map: &HashMap<u32, Landmark>, indices: &[u32]) -> Vec<Landmark> {
+    indices.iter().filter_map(|&i| map.get(&i).copied()).collect()
+}
+
+async fn send_alarm(write_half: &mut (impl SinkExt<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin), message: &str) {
+    println!("🚨 알람 전송! -> {}", message);
+    let _ = write_half.send(Message::Text(message.to_string())).await;
 }
