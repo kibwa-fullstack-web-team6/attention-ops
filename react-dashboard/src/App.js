@@ -1,5 +1,5 @@
 import React from 'react';
-import ReportList from './components/ReportList';
+import ReportList from './components/reportList';
 import './App.css';
 
 function App() {
