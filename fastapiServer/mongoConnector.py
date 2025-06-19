@@ -1,7 +1,9 @@
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
+import uuid
+
 
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
@@ -159,6 +161,70 @@ class MongoConnector:
         
         # deleted_count 속성을 통해 몇 개의 문서가 삭제되었는지 알 수 있습니다.
         return delete_result.deleted_count
+
+    def createReportMetadata(self, report_data: dict) -> str:
+        """
+        [신규] 보고서 메타데이터를 'reports' 컬렉션에 생성합니다.
+        """
+        if self.db is None:
+            return None
+        
+        # 고유한 보고서 ID 생성
+        report_id = f"report-{uuid.uuid4()}"
+        
+        document = {
+            "_id": report_id,
+            "reportTitle": report_data["reportTitle"],
+            "userId": report_data["userId"],
+            "status": "PENDING", # 초기 상태는 '대기 중'
+            "dateRange": {
+                "start": report_data["startDate"],
+                "end": report_data["endDate"]
+            },
+            "s3Path": None,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "completedAt": None
+        }
+        
+        self.db.reports.insert_one(document)
+        return report_id
+
+    def updateReportStatus(self, report_id: str, status: str, s3_path: str = None):
+        """
+        [신규] 특정 보고서의 상태와 S3 경로를 업데이트합니다.
+        """
+        if self.db is None:
+            return
+
+        update_fields = {
+            "status": status,
+            "completedAt": datetime.now(timezone.utc).isoformat()
+        }
+        if s3_path:
+            update_fields["s3Path"] = s3_path
+        
+        self.db.reports.update_one(
+            {"_id": report_id},
+            {"$set": update_fields}
+        )
+    
+    def getReportById(self, report_id: str):
+        """
+        [신규] 특정 보고서 ID로 메타데이터를 조회합니다.
+        """
+        if self.db is None:
+            return None
+        return self.db.reports.find_one({"_id": report_id})
+        
+    def getReportsByUserId(self, user_id: str):
+        """
+        [신규] 특정 사용자의 모든 보고서 메타데이터 목록을 조회합니다.
+        """
+        if self.db is None:
+            return []
+        reports = self.db.reports.find({"userId": user_id}, {'_id': 0}).sort("createdAt", -1)
+        return list(reports)
+
 
 # 앱 전체에서 사용할 단일 DB 커넥터 인스턴스를 생성합니다.
 mongo_connector = MongoConnector()
