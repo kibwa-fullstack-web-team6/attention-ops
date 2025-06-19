@@ -43,16 +43,31 @@ class MongoConnector:
         session_events = self.db.session_events.find(query, {'_id': 0})
         return list(session_events)
 
-    def getSessionsByUserId(self, user_id: str):
+    def getSessionsByUserId(self, user_id: str, start_date: str = None, end_date: str = None, page: int = 1, page_size: int = 10):
         """
-        주어진 userId에 해당하는 모든 세션의 요약 정보를 조회합니다.
-        MongoDB Aggregation Pipeline을 사용하여 효율적으로 데이터를 집계합니다.
+        [업데이트]
+        주어진 userId에 대해, 날짜 필터링 및 페이지네이션을 적용하여 세션 목록을 조회합니다.
         """
         if self.db is None:
-            return []
+            return {"total": 0, "sessions": []}
 
+        # 1. 기본 매치 파이프라인: 특정 userId 필터링
+        match_stage = {"userId": user_id}
+
+        # 2. 날짜 필터링 조건 추가 (start_date, end_date가 주어진 경우)
+        if start_date and end_date:
+            match_stage["timestamp"] = {
+                "$gte": start_date,
+                "$lte": end_date
+            }
+        
+        # 3. 페이지네이션을 위한 계산
+        skip_count = (page - 1) * page_size
+
+        # 4. 전체 Aggregation Pipeline 구성
+        #    - $facet을 사용하여 전체 데이터 개수와 페이지네이션된 데이터를 한 번의 쿼리로 가져옵니다.
         pipeline = [
-            { "$match": { "userId": user_id } },
+            { "$match": match_stage },
             { "$sort": { "timestamp": 1 } },
             {
                 "$group": {
@@ -63,21 +78,24 @@ class MongoConnector:
                     "eventCount": { "$sum": 1 }
                 }
             },
+            { "$sort": { "sessionStart": -1 } },
             {
-                "$project": {
-                    "_id": 0,
-                    "sessionId": "$_id",
-                    "userId": "$userId",
-                    "sessionStart": "$sessionStart",
-                    "sessionEnd": "$sessionEnd",
-                    "eventCount": "$eventCount"
+                "$facet": {
+                    "metadata": [ { "$count": "total" } ],
+                    "data": [ { "$skip": skip_count }, { "$limit": page_size } ]
                 }
-            },
-            { "$sort": { "sessionStart": -1 } }
+            }
         ]
         
-        sessions_summary = list(self.db.session_events.aggregate(pipeline))
-        return sessions_summary
+        result = list(self.db.session_events.aggregate(pipeline))
+        
+        # 5. 최종 결과 포맷팅
+        if result and result[0]['metadata']:
+            total_sessions = result[0]['metadata'][0]['total']
+            sessions_data = result[0]['data']
+            return {"total": total_sessions, "sessions": sessions_data}
+        else:
+            return {"total": 0, "sessions": []}
 
     def analyzeSessionWithAggregation(self, session_id: str):
         """
@@ -125,6 +143,22 @@ class MongoConnector:
             return analysis_report
         
         return None
+    def deleteSessionById(self, session_id: str) -> int:
+        """
+        [신규]
+        주어진 sessionId에 해당하는 모든 이벤트를 삭제합니다.
+        삭제된 문서의 수를 반환합니다.
+        """
+        if self.db is None:
+            return 0
+
+        query = {"sessionId": session_id}
+        
+        # delete_many 쿼리를 사용하여 조건에 맞는 모든 문서를 삭제합니다.
+        delete_result = self.db.session_events.delete_many(query)
+        
+        # deleted_count 속성을 통해 몇 개의 문서가 삭제되었는지 알 수 있습니다.
+        return delete_result.deleted_count
 
 # 앱 전체에서 사용할 단일 DB 커넥터 인스턴스를 생성합니다.
 mongo_connector = MongoConnector()

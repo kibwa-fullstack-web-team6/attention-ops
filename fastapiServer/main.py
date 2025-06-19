@@ -1,7 +1,8 @@
 # fastapiServer/main.py
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException , Query
 import uvicorn
+from typing import Optional
 from mongoConnector import mongo_connector
 
 # FastAPI 앱 인스턴스 생성
@@ -46,16 +47,31 @@ def getSessionAnalysis(session_id: str):
     return analysis_report
 
 @app.get("/users/{user_id}/sessions")
-def getUserSessions(user_id: str):
+def getUserSessions(
+    user_id: str,
+    page: int = 1, 
+    page_size: int = Query(default=10, le=100),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
     """
-    특정 사용자의 모든 세션 목록(요약 정보)을 반환합니다.
+    쿼리 매개변수를 사용하여 필터링 및 페이지네이션된
+    사용자의 세션 목록을 반환합니다.
     """
-    user_sessions = mongo_connector.getSessionsByUserId(user_id)
+    # mongoConnector의 업데이트된 함수를 호출합니다.
+    result = mongo_connector.getSessionsByUserId(
+        user_id=user_id, 
+        page=page, 
+        page_size=page_size, 
+        start_date=start_date, 
+        end_date=end_date
+    )
     
-    if not user_sessions:
-        raise HTTPException(status_code=404, detail="User not found or has no sessions")
+    if result["total"] == 0:
+        # 데이터가 없는 경우 404를 보내지 않고, 빈 목록을 반환하는 것이 더 일반적입니다.
+        return result
         
-    return user_sessions
+    return result
 
 # 이 스크립트가 직접 실행될 때 uvicorn 서버를 구동합니다.
 if __name__ == "__main__":
