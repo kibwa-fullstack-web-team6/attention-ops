@@ -218,13 +218,13 @@ class MongoConnector:
         
     def getReportsByUserId(self, user_id: str):
         """
-        [신규] 특정 사용자의 모든 보고서 메타데이터 목록을 조회합니다.
+        [수정] 특정 사용자의 모든 보고서 메타데이터 목록을 조회합니다.
         """
         if self.db is None:
             return []
-        reports = self.db.reports.find({"userId": user_id}, {'_id': 0}).sort("createdAt", -1)
+        # _id 필드를 제외하는 옵션을 제거하여, ID가 포함되도록 수정합니다.
+        reports = self.db.reports.find({"userId": user_id}).sort("createdAt", -1)
         return list(reports)
-
 
 # 앱 전체에서 사용할 단일 DB 커넥터 인스턴스를 생성합니다.
 mongo_connector = MongoConnector()

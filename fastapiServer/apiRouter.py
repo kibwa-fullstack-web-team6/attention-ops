@@ -3,6 +3,7 @@ from typing import Optional
 from mongoConnector import mongo_connector
 from models import ReportCreateRequest 
 from reportGenerator import generateAndUploadReport 
+from s3Connector import s3_connector
 
 router = APIRouter()
 
@@ -82,3 +83,24 @@ def getReportStatus(report_id: str):
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     return report
+
+@router.get("/reports/{report_id}/content")
+def getReportContent(report_id: str):
+    """
+    특정 보고서의 상세 콘텐츠(S3에 저장된 JSON)를 반환합니다.
+    """
+    # 1. 먼저 MongoDB에서 보고서 메타데이터를 조회하여 S3 경로를 찾습니다.
+    report_metadata = mongo_connector.getReportById(report_id)
+    if not report_metadata:
+        raise HTTPException(status_code=404, detail="Report metadata not found")
+
+    s3_path = report_metadata.get("s3Path")
+    if not s3_path or report_metadata.get("status") != "COMPLETED":
+        raise HTTPException(status_code=404, detail="Report content is not available or still generating")
+    
+    # 2. S3 커넥터를 사용하여 실제 파일 내용을 가져옵니다.
+    report_content = s3_connector.getReportContent(s3_path)
+    if not report_content:
+        raise HTTPException(status_code=500, detail="Failed to retrieve report content from S3")
+        
+    return report_content
