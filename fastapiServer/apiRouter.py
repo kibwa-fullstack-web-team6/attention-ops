@@ -104,3 +104,29 @@ def getReportContent(report_id: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve report content from S3")
         
     return report_content
+
+
+@router.delete("/reports/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def deleteReport(report_id: str):
+    """
+    특정 보고서를 삭제합니다. (S3 파일 및 MongoDB 메타데이터)
+    """
+    # 1. 삭제할 보고서의 메타데이터를 먼저 조회합니다.
+    report_metadata = mongo_connector.getReportById(report_id)
+    if not report_metadata:
+        # 삭제할 대상이 없으면 404 에러를 반환합니다.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report to delete not found")
+
+    # 2. S3에 파일이 존재하면 삭제를 시도합니다.
+    s3_path = report_metadata.get("s3Path")
+    if s3_path:
+        was_deleted = s3_connector.deleteReportContent(s3_path)
+        if not was_deleted:
+            # S3 파일 삭제에 실패하면, 작업을 중단하고 서버 에러를 반환합니다.
+            raise HTTPException(status_code=500, detail="Failed to delete report file from S3")
+
+    # 3. MongoDB에서 메타데이터를 삭제합니다.
+    mongo_connector.db.reports.delete_one({"_id": report_id})
+    
+    # 성공적으로 삭제되면 204 응답을 보냅니다.
+    return

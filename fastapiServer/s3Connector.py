@@ -36,6 +36,23 @@ class S3Connector:
             # JSON 파싱 실패 등 기타 에러 처리
             print(f"🔴 ERROR: S3 객체 처리 중 에러 발생. Error: {e}")
             return None
+    
+    def deleteReportContent(self, s3_key: str):
+        """
+        [신규]
+        주어진 키(경로)를 사용하여 S3 버킷에서 객체를 삭제합니다.
+        """
+        if not self.bucket_name:
+            print("🔴 ERROR: S3_BUCKET_NAME 환경 변수가 설정되지 않았습니다.")
+            return False
+        
+        try:
+            self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
+            print(f"🟢 INFO: S3 객체가 성공적으로 삭제되었습니다. Key: {s3_key}")
+            return True
+        except ClientError as e:
+            print(f"🔴 ERROR: S3 객체 삭제 중 에러 발생. Key: {s3_key}, Error: {e}")
+            return False
 
 # 앱 전체에서 사용할 단일 S3 커넥터 인스턴스를 생성합니다.
 s3_connector = S3Connector()
