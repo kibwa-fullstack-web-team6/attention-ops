@@ -1,49 +1,54 @@
+
 import os
 import boto3
 import json
 from mongoConnector import mongo_connector
+# 새로 만든 llmConnector의 함수들을 import 합니다.
+from llmConnector import get_summary_from_llama3, get_feedback_from_qwen
 
 def generateAndUploadReport(report_id: str, user_id: str, start_date: str, end_date: str):
     """
-    [백그라운드 작업]
-    1. 해당 기간의 모든 세션을 조회합니다.
-    2. 각 세션을 분석하여 최종 리포트 JSON을 만듭니다.
-    3. JSON 파일을 S3에 업로드합니다.
-    4. MongoDB의 리포트 상태를 업데이트합니다.
+    [2단계 LLM 체인 아키텍처]
+    1. MongoDB에서 데이터를 집계하여 전체 보고서 JSON을 생성합니다.
+    2. LLM 1 (Llama3)을 호출하여 사실 기반 요약문을 생성합니다.
+    3. LLM 2 (Qwen)를 호출하여 요약문에 대한 코칭 피드백을 생성합니다.
+    4. 원본 데이터와 최종 피드백을 합쳐 S3에 업로드하고, DB 상태를 업데이트합니다.
     """
-    print(f"INFO: Report generation started for reportId: {report_id}")
+    print(f"INFO: [Report {report_id[:8]}] 보고서 생성 시작.")
     
     try:
-        # 1. 해당 기간의 모든 세션 목록 조회
-        sessions_result = mongo_connector.getSessionsByUserId(user_id, start_date, end_date, page_size=1000) # 페이지 크기를 크게 설정
+        # 1. MongoDB에서 데이터를 집계하여 초기 보고서 JSON 생성
+        sessions_result = mongo_connector.getSessionsByUserId(user_id, start_date, end_date, page_size=1000)
         sessions = sessions_result.get("sessions", [])
-
+        
         if not sessions:
-            print(f"WARN: No sessions found for user {user_id} in the given date range.")
+            # 처리할 세션이 없으면 FAILED 처리
             mongo_connector.updateReportStatus(report_id, "FAILED")
             return
 
-        # 2. 각 세션 분석 및 최종 리포트 데이터 구성
-        analyzed_sessions = []
-        for session in sessions:
-            # getSessionsByUserId의 group stage 결과에서 sessionId는 '_id' 필드에 저장됩니다.
-            # 따라서 session['_id']를 사용하도록 수정합니다.
-            session_analysis = mongo_connector.analyzeSessionWithAggregation(session['_id'])
-            if session_analysis:
-                analyzed_sessions.append(session_analysis)
-        
-        final_report_data = {
+        analyzed_sessions = [mongo_connector.analyzeSessionWithAggregation(s['_id']) for s in sessions if s]
+        initial_report_json = {
             "reportId": report_id,
             "userId": user_id,
             "dateRange": {"start": start_date, "end": end_date},
-            "summary": {
-                "totalSessions": len(analyzed_sessions),
-                # 여기에 총 하품 횟수, 총 졸음 시간 등 전체 기간에 대한 요약 통계를 추가할 수 있습니다.
-            },
+            "summary": {"totalSessions": len(analyzed_sessions)},
             "sessions": analyzed_sessions
         }
+        print(f"INFO: [Report {report_id[:8]}] 1. 초기 보고서 JSON 생성 완료.")
 
-        # 3. S3에 JSON 파일 업로드
+        # 2. LLM 1 (Llama3) 호출 -> 사실 요약문 생성
+        fact_summary = get_summary_from_llama3(initial_report_json)
+        print(f"INFO: [Report {report_id[:8]}] 2. Llama3 요약 생성 완료.")
+
+        # 3. LLM 2 (Qwen) 호출 -> 최종 코칭 피드백 생성
+        coaching_feedback = get_feedback_from_qwen(fact_summary)
+        print(f"INFO: [Report {report_id[:8]}] 3. Qwen 코칭 피드백 생성 완료.")
+
+        # 4. 최종 보고서 데이터에 LLM이 생성한 피드백 추가
+        initial_report_json["llmSummary"] = fact_summary
+        initial_report_json["coachingFeedback"] = coaching_feedback
+        
+        # 5. 최종본을 S3에 업로드
         s3_client = boto3.client('s3')
         bucket_name = os.getenv("S3_BUCKET_NAME")
         s3_file_key = f"reports/{user_id}/{report_id}.json"
@@ -51,16 +56,15 @@ def generateAndUploadReport(report_id: str, user_id: str, start_date: str, end_d
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_file_key,
-            Body=json.dumps(final_report_data, indent=2, ensure_ascii=False),
+            Body=json.dumps(initial_report_json, indent=2, ensure_ascii=False),
             ContentType='application/json'
         )
-        print(f"INFO: Report successfully uploaded to S3: {s3_file_key}")
+        print(f"INFO: [Report {report_id[:8]}] 4. 최종 보고서 S3 업로드 완료.")
 
-        # 4. MongoDB 리포트 상태를 'COMPLETED'로 업데이트
+        # 6. MongoDB 상태를 'COMPLETED'로 업데이트
         mongo_connector.updateReportStatus(report_id, "COMPLETED", s3_path=s3_file_key)
-        print(f"INFO: Report generation COMPLETED for reportId: {report_id}")
+        print(f"✅ SUCCESS: [Report {report_id[:8]}] 모든 보고서 생성 과정 완료.")
 
     except Exception as e:
-        print(f"ERROR: Report generation failed for reportId: {report_id}. Error: {e}")
+        print(f"🔴 ERROR: [Report {report_id[:8]}] 보고서 생성 중 예외 발생: {e}")
         mongo_connector.updateReportStatus(report_id, "FAILED")
-

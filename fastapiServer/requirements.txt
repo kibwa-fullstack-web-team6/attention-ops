@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 pymongo
 boto3
+requests
