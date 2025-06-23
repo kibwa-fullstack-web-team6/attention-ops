@@ -20,47 +20,34 @@ def augment_report_data(template_path="template_report.json", num_reports=50):
         return
 
     # 가상 사용자 유형(페르소나) 정의
-    # 각 페르소나는 이벤트 발생 횟수의 최소/최대 범위를 가집니다.
     personas = {
-        "diligent_student": { # 모범생
-            "yawn": (0, 2), "distraction": (0, 5), "drowsiness": (0, 2)
-        },
-        "tired_student": { # 피곤한 학생
-            "yawn": (5, 20), "distraction": (2, 10), "drowsiness": (5, 15)
-        },
-        "distracted_student": { # 산만한 학생
-            "yawn": (1, 5), "distraction": (10, 30), "drowsiness": (1, 5)
-        }
+        "diligent_student": { "yawn": (0, 2), "distraction": (0, 5), "drowsiness": (0, 2) },
+        "tired_student": { "yawn": (5, 20), "distraction": (2, 10), "drowsiness": (5, 15) },
+        "distracted_student": { "yawn": (1, 5), "distraction": (10, 30), "drowsiness": (1, 5) }
     }
     
-    # 생성된 데이터를 저장할 폴더 생성
     output_dir = "augmented_reports"
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"🚀 {num_reports}개의 데이터 증강을 시작합니다...")
 
     for i in range(num_reports):
-        # 1. 템플릿 데이터를 깊은 복사하여 원본을 유지합니다.
+        # 1. 템플릿 데이터를 깊은 복사합니다.
         new_report = deepcopy(template_data)
 
         # 2. 페르소나를 무작위로 선택합니다.
         persona_name, persona_ranges = random.choice(list(personas.items()))
         
-        # 3. 새로운 고유 ID들을 생성합니다.
-        user_id = f"user_{i+2}" # 기존 user '1'과 겹치지 않도록
+        # 3. 새로운 고유 ID들을 생성하고, userId는 '1'로 고정합니다.
+        user_id = "1" # 모든 보고서의 userId를 '1'로 고정
         new_report['reportId'] = f"report-{uuid.uuid4()}"
         new_report['userId'] = user_id
         
-        total_yawn = 0
-        total_distraction = 0
-        total_drowsiness = 0
-        
         # 4. 각 세션의 데이터를 페르소나에 맞게 수정합니다.
         for session in new_report['sessions']:
-            session['sessionId'] = str(uuid.uuid4()) # 세션 ID도 새 것으로 교체
-            session['userId'] = user_id
+            session['sessionId'] = str(uuid.uuid4())
+            session['userId'] = user_id # 각 세션의 userId도 '1'로 고정
 
-            # 이벤트 횟수를 페르소나 범위 내에서 랜덤하게 변경
             yawn_count = random.randint(*persona_ranges['yawn'])
             distraction_count = random.randint(*persona_ranges['distraction'])
             drowsiness_count = random.randint(*persona_ranges['drowsiness'])
@@ -69,22 +56,16 @@ def augment_report_data(template_path="template_report.json", num_reports=50):
             session['eventCounts']['distraction'] = distraction_count
             session['eventCounts']['drowsiness'] = drowsiness_count
             
-            # 이벤트 시간도 횟수에 비례하여 랜덤하게 변경
+            # 'totalTimeMs' 키가 없을 경우를 대비하여, setdefault로 안전하게 생성합니다.
+            session.setdefault('totalTimeMs', {})
+
             session['totalTimeMs']['distraction'] = distraction_count * random.randint(1000, 5000)
             session['totalTimeMs']['drowsiness'] = drowsiness_count * random.randint(2000, 8000)
-            
-            # 보고서 전체 요약을 위해 횟수를 누적
-            total_yawn += yawn_count
-            total_distraction += distraction_count
-            total_drowsiness += drowsiness_count
 
-        # 5. 보고서 전체 요약(summary) 부분도 업데이트 (선택 사항)
-        new_report['summary']['persona'] = persona_name
-        new_report['summary']['totalYawnCount'] = total_yawn
-        new_report['summary']['totalDistractionCount'] = total_distraction
-        new_report['summary']['totalDrowsinessCount'] = total_drowsiness
+        # summary 객체는 원본 템플릿의 구조를 그대로 유지하도록 합니다.
+        new_report['summary']['totalSessions'] = len(new_report['sessions'])
         
-        # 6. 생성된 가짜 보고서를 별도의 JSON 파일로 저장합니다.
+        # 5. 생성된 가짜 보고서를 별도의 JSON 파일로 저장합니다.
         output_path = os.path.join(output_dir, f"{new_report['reportId']}.json")
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(new_report, f, indent=2, ensure_ascii=False)
