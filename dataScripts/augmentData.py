@@ -3,78 +3,100 @@ import random
 import uuid
 import os
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+
+def random_date(start, end):
+    """지정된 두 날짜 사이의 랜덤한 날짜를 반환합니다."""
+    return start + timedelta(
+        seconds=random.randint(0, int((end - start).total_seconds())),
+    )
 
 def augment_report_data(template_path="template_report.json", num_reports=50):
     """
-    템플릿 보고서 JSON을 기반으로, 다양한 사용자 유형의
-    가짜 보고서 데이터를 대량으로 생성합니다.
+    [최종 버전]
+    템플릿을 기반으로, 세션의 개수, 길이, 날짜까지 랜덤화하여
+    구조적으로 매우 다양한 가짜 보고서 데이터를 생성합니다.
     """
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             template_data = json.load(f)
-    except FileNotFoundError:
-        print(f"🔴 ERROR: 템플릿 파일 '{template_path}'을 찾을 수 없습니다.")
-        return
-    except json.JSONDecodeError:
-        print(f"🔴 ERROR: '{template_path}' 파일이 올바른 JSON 형식이 아닙니다.")
+    except Exception as e:
+        print(f"🔴 ERROR: 템플릿 파일 로드 실패. {e}")
         return
 
-    # 가상 사용자 유형(페르소나) 정의
     personas = {
-        "diligent_student": { "yawn": (0, 2), "distraction": (0, 5), "drowsiness": (0, 2) },
-        "tired_student": { "yawn": (5, 20), "distraction": (2, 10), "drowsiness": (5, 15) },
-        "distracted_student": { "yawn": (1, 5), "distraction": (10, 30), "drowsiness": (1, 5) }
+        "diligent_student": { "yawn_per_hour": (0, 5), "distraction_per_hour": (1, 10), "drowsiness_per_hour": (0, 3) },
+        "tired_student": { "yawn_per_hour": (10, 40), "distraction_per_hour": (5, 20), "drowsiness_per_hour": (10, 30) },
+        "distracted_student": { "yawn_per_hour": (2, 10), "distraction_per_hour": (20, 60), "drowsiness_per_hour": (1, 10) }
     }
     
     output_dir = "augmented_reports"
     os.makedirs(output_dir, exist_ok=True)
-
     print(f"🚀 {num_reports}개의 데이터 증강을 시작합니다...")
+    
+    # 보고서 기간을 4월 1일부터 6월 20일 사이로 설정
+    period_start = datetime(2025, 4, 1, tzinfo=timezone.utc)
+    period_end = datetime(2025, 6, 20, tzinfo=timezone.utc)
 
     for i in range(num_reports):
-        # 1. 템플릿 데이터를 깊은 복사합니다.
         new_report = deepcopy(template_data)
-
-        # 2. 페르소나를 무작위로 선택합니다.
-        persona_name, persona_ranges = random.choice(list(personas.items()))
+        persona_name, persona_rates = random.choice(list(personas.items()))
         
-        # 3. 새로운 고유 ID들을 생성하고, userId는 '1'로 고정합니다.
-        user_id = "1" # 모든 보고서의 userId를 '1'로 고정
+        # 1. 보고서 기간 랜덤화 (1일 ~ 7일 사이)
+        report_duration_days = random.randint(1, 7)
+        report_start_date = random_date(period_start, period_end - timedelta(days=report_duration_days))
+        report_end_date = report_start_date + timedelta(days=report_duration_days)
+        
+        new_report['dateRange']['start'] = report_start_date.strftime('%Y-%m-%d')
+        new_report['dateRange']['end'] = report_end_date.strftime('%Y-%m-%d')
+
+        # 2. 세션 개수 랜덤화 (3개 ~ 15개)
+        num_sessions = random.randint(3, 15)
+        new_report['sessions'] = random.choices(new_report['sessions'], k=num_sessions) if new_report['sessions'] else []
+        new_report['summary']['totalSessions'] = num_sessions
+        
+        # 3. 새로운 ID 및 userId 설정
+        user_id = "1"
         new_report['reportId'] = f"report-{uuid.uuid4()}"
         new_report['userId'] = user_id
         
-        # 4. 각 세션의 데이터를 페르소나에 맞게 수정합니다.
+        # 4. 각 세션의 내용 랜덤화
         for session in new_report['sessions']:
             session['sessionId'] = str(uuid.uuid4())
-            session['userId'] = user_id # 각 세션의 userId도 '1'로 고정
+            session['userId'] = user_id
 
-            yawn_count = random.randint(*persona_ranges['yawn'])
-            distraction_count = random.randint(*persona_ranges['distraction'])
-            drowsiness_count = random.randint(*persona_ranges['drowsiness'])
+            # 세션 시간을 보고서 기간 내에서 랜덤하게 설정
+            session_start_time = random_date(report_start_date, report_end_date)
+            duration_seconds = random.randint(300, 7200) # 5분 ~ 2시간
+            session_end_time = session_start_time + timedelta(seconds=duration_seconds)
+            
+            session['sessionStart'] = session_start_time.isoformat()
+            session['sessionEnd'] = session_end_time.isoformat()
+            session['totalDurationSeconds'] = duration_seconds
+            
+            # 이벤트 횟수를 '시간당 발생률' 기반으로 변경
+            duration_hours = duration_seconds / 3600
+            yawn_count = int(random.uniform(*persona_rates['yawn_per_hour']) * duration_hours)
+            distraction_count = int(random.uniform(*persona_rates['distraction_per_hour']) * duration_hours)
+            drowsiness_count = int(random.uniform(*persona_rates['drowsiness_per_hour']) * duration_hours)
 
+            session.setdefault('eventCounts', {})
             session['eventCounts']['yawn'] = yawn_count
             session['eventCounts']['distraction'] = distraction_count
             session['eventCounts']['drowsiness'] = drowsiness_count
             
-            # 'totalTimeMs' 키가 없을 경우를 대비하여, setdefault로 안전하게 생성합니다.
             session.setdefault('totalTimeMs', {})
-
             session['totalTimeMs']['distraction'] = distraction_count * random.randint(1000, 5000)
             session['totalTimeMs']['drowsiness'] = drowsiness_count * random.randint(2000, 8000)
 
-        # summary 객체는 원본 템플릿의 구조를 그대로 유지하도록 합니다.
-        new_report['summary']['totalSessions'] = len(new_report['sessions'])
-        
-        # 5. 생성된 가짜 보고서를 별도의 JSON 파일로 저장합니다.
+        # 5. 생성된 보고서 파일 저장
         output_path = os.path.join(output_dir, f"{new_report['reportId']}.json")
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(new_report, f, indent=2, ensure_ascii=False)
             
-        print(f"  -> ({i+1}/{num_reports}) {persona_name} 유형의 보고서 생성 완료: {output_path}")
+        print(f"  -> ({i+1}/{num_reports}) {persona_name} 유형 ({num_sessions}개 세션, {report_start_date.strftime('%Y-%m-%d')}) 보고서 생성 완료.")
 
     print(f"\n✅ 데이터 증강 완료! '{output_dir}' 폴더를 확인하세요.")
 
-
 if __name__ == "__main__":
-    # 50개의 가상 보고서를 생성합니다.
-    augment_report_data(num_reports=50)
+    augment_report_data(num_reports=200)
