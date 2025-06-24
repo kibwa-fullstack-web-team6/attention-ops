@@ -9,6 +9,7 @@ app.include_router(api_router, prefix="/api")
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
-@app.get("/health")
+@app.get("/api/health")
 def healthCheck():
-    return {"status": "OK"}
+    print("health check")
+    return {"status": 200, "message": "OK"}
