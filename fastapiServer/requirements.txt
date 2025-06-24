@@ -3,3 +3,4 @@ uvicorn[standard]
 pymongo
 boto3
 requests
+httpx
