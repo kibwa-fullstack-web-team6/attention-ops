@@ -139,9 +139,31 @@ function connectWebSocket() {
     };
 
     websocket.onmessage = (event) => {
-        console.log(`🔔 서버로부터 메시지 수신: ${event.data}`);
-        statusElement.textContent = `🚨 서버 알람: ${event.data}`;
-        addWarningToList(event.data);
+        // 서버로부터 받은 메시지 (예: "졸음이 감지되었습니다!")
+        const alarmMessage = event.data; 
+
+        console.log(`🔔 서버로부터 메시지 수신: ${alarmMessage}`);
+        
+        // 1. 기존 상태 표시줄 업데이트
+        statusElement.textContent = `🚨 서버 알람: ${alarmMessage}`;
+        
+        // 2. 기존 경고 목록에 추가
+        addWarningToList(alarmMessage);
+
+        // 3. [추가] Toastify.js를 사용한 시각적 알림
+        Toastify({
+            text: `🚨 ${alarmMessage}`,
+            duration: 3000, // 3초간 보여짐
+            newWindow: true,
+            close: true,
+            gravity: "top", // 화면 상단에 표시
+            position: "right", // 오른쪽에 표시
+            stopOnFocus: true, // 알림에 마우스를 올리면 사라지지 않음
+            style: {
+            background: "linear-gradient(to right, #ff5f6d, #ffc371)", // 그라데이션 배경
+            },
+            onClick: function(){} // 클릭 시 이벤트 (필요하다면 구현)
+        }).showToast();
     };
 
     websocket.onclose = () => {
