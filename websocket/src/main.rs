@@ -87,6 +87,7 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     let addr = match stream.peer_addr() { Ok(addr) => addr, Err(_) => return };
     let mut redis_conn = match redis_client.get_async_connection().await { Ok(conn) => conn, Err(_) => return };
     let ws_stream = match accept_async(stream).await {
+        // ... (이 부분은 변경 없음) ...
         Ok(ws) => ws,
         Err(e) => {
             if let tokio_tungstenite::tungstenite::Error::Protocol(tokio_tungstenite::tungstenite::error::ProtocolError::MissingConnectionUpgradeHeader) = e {
@@ -105,10 +106,13 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     let mut current_state = AttentionState::Focused;
     let mut state_changed_at = Instant::now();
 
+    // --- [추가] 하품 횟수를 저장할 변수 ---
+    let mut yawn_count: u32 = 0;
+
     const EAR_THRESHOLD: f64 = 0.21;
     const MAR_THRESHOLD: f64 = 0.6;
     const YAW_THRESHOLD: f64 = 0.3;
-    const CONSECUTIVE_FRAMES_TRIGGER: u64 = 3;
+    const CONSECUTIVE_FRAMES_TRIGGER: u64 = 3; // 이 상수는 현재 로직에서 사용되지 않으므로 나중에 제거하거나 활용할 수 있습니다.
 
     loop {
         tokio::select! {
@@ -118,7 +122,6 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
                 if let Message::Text(text) = msg {
                     if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
                         
-                        // 현재 상태가 '일시정지'이면, 데이터 분석을 건너뜁니다.
                         if current_state == AttentionState::Paused && client_msg.event_type == "data" {
                             let _ = redis_conn.publish::<_, _, i64>("attention-events", &text).await;
                             continue;
@@ -145,8 +148,16 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
                                         AttentionState::Focused
                                     };
                                     
+                                    // --- [수정] 하품 감지 및 알람 로직 ---
                                     if mar > MAR_THRESHOLD {
                                         create_and_publish_event(&mut redis_conn, &client_msg, "YAWN_DETECTED", json!({})).await;
+                                        yawn_count += 1; // 하품 카운트 증가
+                                        
+                                        // 5의 배수마다 알람 전송
+                                        if yawn_count > 0 && yawn_count % 5 == 0 {
+                                            let yawn_alarm = format!("하품 {}회 감지! 스트레칭 한번 어떠세요? 🤸", yawn_count);
+                                            send_alarm(&mut write, &yawn_alarm).await;
+                                        }
                                     }
                                 }
                             },
@@ -167,31 +178,26 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
 
                         if new_state != current_state {
                             let duration_ms = state_changed_at.elapsed().as_millis();
-
-                            // 이전 상태(current_state)와 새로운 상태(new_state)를 모두 고려하여 이벤트 타입을 결정
+                            
                             let event_type = match (current_state, new_state) {
-                                // '일시정지'에서 '집중'으로 돌아왔을 때
                                 (AttentionState::Paused, AttentionState::Focused) => "SESSION_RESUMED",
-                                // 다른 어떤 상태에서 '집중'으로 돌아왔을 때
                                 (_, AttentionState::Focused) => "FOCUS_RESTORED",
-                                // 다른 어떤 상태에서 '일시정지'가 되었을 때
                                 (_, AttentionState::Paused) => "SESSION_PAUSED",
                                 (_, AttentionState::Drowsy) => "DROWSINESS_STARTED",
                                 (_, AttentionState::Distracted) => "DISTRACTION_STARTED",
                                 (_, AttentionState::UserLeft) => "USER_LEFT",
                             };
-
-                            // 이전 상태가 얼마나 지속되었는지에 대한 정보를 포함하여 이벤트 발행
+                            
                             create_and_publish_event(&mut redis_conn, &client_msg, event_type, json!({ "previousStateDurationMs": duration_ms })).await;
                             
                             current_state = new_state;
                             state_changed_at = Instant::now();
-
-                            // 알람은 Paused 상태에서는 보내지 않음
+                            
+                            // --- [수정] 알람 메시지 한글화 ---
                             let alarm_msg = match new_state {
-                                AttentionState::Drowsy => "Drowsiness Detected!",
-                                AttentionState::Distracted => "Distracted! Please focus.",
-                                AttentionState::UserLeft => "Are you there? Face not detected.",
+                                AttentionState::Drowsy => "졸음이 감지되었습니다! 잠시 쉬어가는 건 어떨까요? ☕",
+                                AttentionState::Distracted => "주의가 분산되었습니다! 다시 집중해볼까요? 💪",
+                                AttentionState::UserLeft => "사용자가 자리를 비웠나요? 얼굴이 감지되지 않습니다. 🤔",
                                 _ => ""
                             };
                             if !alarm_msg.is_empty() { send_alarm(&mut write, alarm_msg).await; }
@@ -206,7 +212,6 @@ async fn handle_connection(stream: TcpStream, redis_client: redis::Client) {
     }
     println!("🔌 '{}' 와의 연결이 종료되었습니다.", addr);
 }
-
 // 헬퍼 함수들
 async fn create_and_publish_event(
     redis_conn: &mut redis::aio::Connection,
