@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # FastAPI 서버의 .env 파일을 찾기 위해 경로를 추가합니다.
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'fastapiServer'))
-load_dotenv(dotenv_path='fastapiServer/.env')
+
+load_dotenv(dotenv_path='.env')
 
 def parseTimestamp(timestamp_str: str) -> datetime:
     """나노초 정밀도를 가진 ISO 형식의 시간 문자열을 변환합니다."""
