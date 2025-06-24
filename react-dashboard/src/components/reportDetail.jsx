@@ -1,132 +1,134 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card, Row, Col, Statistic, Descriptions, Typography, Spin, message, Tag, Button, Alert } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
+import { Pie, Bar } from 'react-chartjs-2';
 import axios from 'axios';
 
-// Chart.js 라이브러리에서 필요한 요소들을 import 합니다.
-import { Bar, Pie } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+// Chart.js에 필요한 요소들을 등록합니다.
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
-// Chart.js에 사용할 구성 요소를 등록합니다.
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement, // Pie 차트를 위해 ArcElement를 추가합니다.
-  Title,
-  Tooltip,
-  Legend
-);
+const { Title, Text } = Typography;
 
 function ReportDetail() {
   const { reportId } = useParams();
-  const [report, setReport] = useState(null);
+  const navigate = useNavigate();
+  const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchReportDetail = async () => {
+    const fetchReportContent = async () => {
+      setLoading(true);
       try {
         const response = await axios.get(`/api/reports/${reportId}/content`);
-        setReport(response.data);
-      } catch (err) {
-        setError('상세 보고서 데이터를 불러오는 데 실패했습니다.');
-        console.error(err);
+        setReportData(response.data);
+      } catch (error) {
+        message.error('보고서 상세 내용을 불러오는 데 실패했습니다.');
+        console.error(error);
       } finally {
         setLoading(false);
       }
     };
-    fetchReportDetail();
+    fetchReportContent();
   }, [reportId]);
 
-  if (loading) return <div>상세 보고서 로딩 중...</div>;
-  if (error) return <div>에러: {error}</div>;
-  if (!report) return <div>보고서가 없습니다.</div>;
+  // 데이터 계산 로직 (useMemo로 감싸서 reportData가 바뀔 때만 재계산)
+  const calculatedData = useMemo(() => {
+    if (!reportData || !Array.isArray(reportData.sessions)) {
+      return null;
+    }
 
-  // 보고서 전체에 대한 요약 차트 데이터 생성
-  const getTotalEventCounts = () => {
-    const totalCounts = { yawn: 0, distraction: 0, drowsiness: 0 };
-    report.sessions.forEach(session => {
-      totalCounts.yawn += session.eventCounts.yawn;
-      totalCounts.distraction += session.eventCounts.distraction;
-      totalCounts.drowsiness += session.eventCounts.drowsiness;
+    const totalDurationMinutes = reportData.sessions.reduce((acc, session) => acc + session.totalDurationSeconds, 0) / 60;
+    const totalEventCounts = { yawn: 0, distraction: 0, drowsiness: 0 };
+    reportData.sessions.forEach(session => {
+        totalEventCounts.yawn += session.eventCounts.yawn;
+        totalEventCounts.distraction += session.eventCounts.distraction;
+        totalEventCounts.drowsiness += session.eventCounts.drowsiness;
     });
-    return totalCounts;
-  };
+    const totalAlerts = totalEventCounts.yawn + totalEventCounts.distraction + totalEventCounts.drowsiness;
 
-  const totalEventData = getTotalEventCounts();
-
-  const pieChartData = {
-    labels: ['총 하품 횟수', '총 주의 분산 횟수', '총 졸음 횟수'],
-    datasets: [{
-      data: [totalEventData.yawn, totalEventData.distraction, totalEventData.drowsiness],
-      backgroundColor: [
-        'rgba(255, 206, 86, 0.7)',
-        'rgba(255, 99, 132, 0.7)',
-        'rgba(54, 162, 235, 0.7)',
-      ],
-      hoverOffset: 4,
-    }],
-  };
-
-  // 개별 세션의 막대 차트 데이터를 생성하는 함수
-  const getBarChartData = (session) => {
-    return {
+    const pieChartData = {
       labels: ['하품', '주의 분산', '졸음'],
-      datasets: [
-        {
-          label: '이벤트 발생 횟수',
-          data: [
-            session.eventCounts.yawn,
-            session.eventCounts.distraction,
-            session.eventCounts.drowsiness,
-          ],
-          backgroundColor: 'rgba(75, 192, 192, 0.6)',
-        },
-      ],
+      datasets: [{
+        label: '이벤트 횟수',
+        data: [totalEventCounts.yawn, totalEventCounts.distraction, totalEventCounts.drowsiness],
+        backgroundColor: ['rgba(255, 206, 86, 0.5)', 'rgba(255, 99, 132, 0.5)', 'rgba(54, 162, 235, 0.5)'],
+        borderColor: ['rgba(255, 206, 86, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)'],
+        borderWidth: 1,
+      }],
     };
-  };
+
+    const barChartData = {
+      labels: reportData.sessions.map((_, index) => `세션 ${index + 1}`),
+      datasets: [{
+        label: '세션별 총 이벤트 횟수',
+        data: reportData.sessions.map(s => s.eventCounts.yawn + s.eventCounts.distraction + s.eventCounts.drowsiness),
+        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+      }],
+    };
+
+    return {
+      summary: {
+        totalSessions: reportData.summary.totalSessions,
+        totalDurationMinutes: totalDurationMinutes,
+        totalAlerts: totalAlerts,
+        averageFocusScore: 0, // 평균 집중도는 API에 없으므로, 일단 0으로 표시
+      },
+      pieChartData,
+      barChartData,
+    };
+
+  }, [reportData]);
+
+  // 로딩 및 에러 처리 (방어 코드)
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><Spin size="large" /></div>;
+  }
+
+  if (!calculatedData) {
+    return <Title level={3}>보고서 데이터를 표시할 수 없습니다. 데이터 형식을 확인해주세요.</Title>;
+  }
 
   return (
     <div>
-      {/* 뒤로가기 링크 추가 */}
-      <Link to="/">← 보고서 목록으로 돌아가기</Link>
-      
-      <h2 style={{marginTop: '20px'}}>{report.reportTitle} 상세 분석</h2>
-      <p><strong>분석 기간:</strong> {new Date(report.dateRange.start).toLocaleDateString()} ~ {new Date(report.dateRange.end).toLocaleDateString()}</p>
-      
-      <hr />
-
-      <h3>종합 분석 요약</h3>
-      <p>총 {report.summary.totalSessions}번의 세션 동안의 이벤트 발생 비율입니다.</p>
-      <div style={{ maxWidth: '400px', margin: 'auto' }}>
-        <Pie data={pieChartData} />
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
+        <Button onClick={() => navigate(-1)} icon={<ArrowLeftOutlined />} style={{ marginRight: '16px' }} />
+        <div>
+          <Title level={3} style={{ marginBottom: 0 }}>{reportData.reportTitle || `보고서 #${reportId}`}</Title>
+          <Text type="secondary">상세 분석 결과</Text>
+        </div>
       </div>
 
-      <hr style={{margin: '40px 0'}} />
+      <Descriptions bordered style={{ marginBottom: 24 }} column={2}>
+        <Descriptions.Item label="보고서 ID">{reportId}</Descriptions.Item>
+        <Descriptions.Item label="생성일">{reportData.createdAt ? new Date(reportData.createdAt).toLocaleString() : 'N/A'}</Descriptions.Item>
+        <Descriptions.Item label="상태"><Tag color="green">{reportData.status || 'COMPLETED'}</Tag></Descriptions.Item>
+        <Descriptions.Item label="분석 기간">
+          {new Date(reportData.dateRange.start).toLocaleDateString()} ~ {new Date(reportData.dateRange.end).toLocaleDateString()}
+        </Descriptions.Item>
+      </Descriptions>
+      
+      <Title level={4} style={{ marginBottom: 16 }}>핵심 요약</Title>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}><Card><Statistic title="총 세션 수" value={calculatedData.summary.totalSessions} /></Card></Col>
+        <Col xs={24} sm={12} md={6}><Card><Statistic title="총 학습 시간(분)" value={Math.round(calculatedData.summary.totalDurationMinutes)} /></Card></Col>
+        <Col xs={24} sm={12} md={6}><Card><Statistic title="평균 집중도" value={calculatedData.summary.averageFocusScore} suffix="%" /></Card></Col>
+        <Col xs={24} sm={12} md={6}><Card><Statistic title="총 알림 횟수" value={calculatedData.summary.totalAlerts} suffix="회" /></Card></Col>
+      </Row>
+      
+      <Title level={4} style={{ marginTop: 24, marginBottom: 16 }}>AI 학습 코치</Title>
+      <Alert
+        message="코칭 피드백"
+        description={reportData.coachingFeedback || "생성된 코칭 피드백이 없습니다."}
+        type="info"
+        showIcon
+      />
 
-      <h3>세션별 상세 분석</h3>
-      {report.sessions.map(session => (
-        <div key={session.sessionId} style={{ border: '1px solid #ccc', margin: '20px', padding: '10px' }}>
-            <h4>세션 ID: {session.sessionId}</h4>
-            <p><strong>세션 시간:</strong> {new Date(session.sessionStart).toLocaleString()} ~ {new Date(session.sessionEnd).toLocaleString()} ({session.totalDurationSeconds}초)</p>
-            <div style={{ maxWidth: '600px', margin: '20px auto' }}>
-              <Bar data={getBarChartData(session)} />
-            </div>
-            <ul>
-                <li>총 주의 분산 시간: {session.totalTimeMs.distraction / 1000}초</li>
-                <li>총 졸음 시간: {session.totalTimeMs.drowsiness / 1000}초</li>
-            </ul>
-        </div>
-      ))}
+      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+        <Col xs={24} md={12}><Card title="이벤트 유형 분석"><Pie data={calculatedData.pieChartData} /></Card></Col>
+        <Col xs={24} md={12}><Card title="세션별 이벤트 발생 수"><Bar data={calculatedData.barChartData} /></Card></Col>
+      </Row>
     </div>
   );
 }
