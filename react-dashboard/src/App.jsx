@@ -9,24 +9,25 @@ import './App.css';
 const { Header, Content, Footer } = Layout;
 const { Title } = Typography;
 
-// 실제 페이지 내용을 렌더링하는 컴포넌트
 function PageContent() {
   const location = useLocation();
-  const isLandingPage = location.pathname === '/';
+  // [수정] 랜딩 페이지와 보고서 목록 페이지는 다크 레이아웃을 사용하도록 조건을 변경합니다.
+  const useDarkLayout = location.pathname === '/' || location.pathname === '/reports';
 
-  // 랜딩 페이지일 경우, 패딩과 흰색 배경이 없는 Content를 사용합니다.
-  const contentStyle = isLandingPage
+  const contentStyle = useDarkLayout
     ? { padding: 0 }
-    : { padding: '24px 48px' };
+    : { padding: '24px 48px', background: '#f0f2f5' };
 
-  const contentWrapperStyle = isLandingPage
+  const contentWrapperStyle = useDarkLayout
     ? {}
-    : { background: '#fff', padding: 24, minHeight: 'calc(100vh - 160px)' };
+    : { background: '#fff', padding: 24, minHeight: 'calc(100vh - 128px)' };
+  
+  // 보고서 상세 페이지에만 별도의 헤더/푸터를 보여줍니다.
+  const showDashboardHeaderFooter = !useDarkLayout && location.pathname.startsWith('/reports/');
 
   return (
-    <Layout>
-      {/* 랜딩 페이지가 아닐 때만 헤더와 푸터를 보여줍니다. */}
-      {!isLandingPage && (
+    <Layout style={{ background: 'transparent' }}>
+      {showDashboardHeaderFooter && (
         <Header style={{ display: 'flex', alignItems: 'center' }}>
           <Title level={3} style={{ color: 'white', margin: 0 }}>
             Attention Project - Dashboard
@@ -44,7 +45,7 @@ function PageContent() {
         </div>
       </Content>
 
-      {!isLandingPage && (
+      {showDashboardHeaderFooter && (
          <Footer style={{ textAlign: 'center' }}>
             Attention Project ©{new Date().getFullYear()} Created by Hwichan
          </Footer>
@@ -53,7 +54,6 @@ function PageContent() {
   );
 }
 
-// App 컴포넌트는 Router를 제공하는 역할만 합니다.
 function App() {
   return (
     <Router>

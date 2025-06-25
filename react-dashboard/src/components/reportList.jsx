@@ -1,39 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Typography, Popconfirm, message } from 'antd';
+import { Row, Col, Button, Typography, message, Spin, Card, Tag, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined, FileTextOutlined, LeftOutlined } from '@ant-design/icons';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import ChromaCard from './chromaCard';
+import './reportList.css';
 
-const { Title } = Typography;
+const { Title, Paragraph } = Typography;
 
 function ReportList() {
-  console.log("1. ReportList 컴포넌트 렌더링 시작"); // <-- 디버깅 로그 1
-  const [reports, setReports] = useState([]);
+  const [latestReport, setLatestReport] = useState(null);
+  const [otherReports, setOtherReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchReports = async () => {
-    console.log("2. fetchReports 함수 실행 시작"); // <-- 디버깅 로그 2
     setLoading(true);
     try {
       const response = await axios.get('/api/users/1/reports');
-      console.log("3. API 요청 성공! 응답 데이터:", response.data); // <-- 디버깅 로그 3
-
-      if (Array.isArray(response.data)) {
-        console.log("4. 데이터가 배열임. map 함수 실행 전."); // <-- 디버깅 로그 4
-        const dataWithKeys = response.data.map(item => ({ 
-          ...item, 
-          key: item._id 
-        }));
-        console.log("5. map 함수 실행 완료. 상태 업데이트 전 데이터:", dataWithKeys); // <-- 디버깅 로그 5
-        setReports(dataWithKeys);
-      } else {
-        console.error("API 응답이 배열 형식이 아닙니다:", response.data);
-        message.error('보고서 데이터 형식이 올바르지 않습니다.');
-        setReports([]);
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const sortedData = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setLatestReport(sortedData[0]);
+        setOtherReports(sortedData.slice(1));
       }
     } catch (error) {
-      console.error("API 요청 또는 데이터 처리 중 치명적 에러 발생:", error); // <-- 디버깅 로그 (에러)
       message.error('보고서 목록을 불러오는 데 실패했습니다.');
-      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -43,55 +34,69 @@ function ReportList() {
     fetchReports();
   }, []);
 
-  console.log("6. Table 컴포넌트로 전달될 최종 데이터:", reports); // <-- 디버깅 로그 6
-  const columns = [
-      // ... columns 배열 정의는 이전과 동일 ...
-      {
-          title: '보고서 제목',
-          dataIndex: 'reportTitle',
-          key: 'reportTitle',
-          render: (text, record) => <Link to={`/reports/${record._id}`}>{text}</Link>,
-      },
-      {
-          title: '생성일',
-          dataIndex: 'createdAt',
-          key: 'createdAt',
-          render: (text) => new Date(text).toLocaleString(),
-      },
-      {
-          title: '상태',
-          dataIndex: 'status',
-          key: 'status',
-      },
-      {
-          title: '액션',
-          key: 'action',
-          render: (_, record) => (
-              <Space size="middle">
-                  <Popconfirm
-                      title="정말로 이 보고서를 삭제하시겠습니까?"
-                      onConfirm={() => handleDelete(record._id)}
-                      okText="예"
-                      cancelText="아니오"
-                  >
-                      <Button type="primary" danger>삭제</Button>
-                  </Popconfirm>
-              </Space>
-          ),
-      },
-  ];
-
   const handleDelete = async (reportId) => {
-    // ... handleDelete 함수는 이전과 동일 ...
+    try {
+      await axios.delete(`/api/reports/${reportId}`);
+      message.success('보고서가 성공적으로 삭제되었습니다.');
+      fetchReports();
+    } catch (error) {
+      message.error('보고서 삭제에 실패했습니다.');
+    }
   };
 
+  const handleCardClick = (reportId) => {
+    navigate(`/reports/${reportId}`);
+  };
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#101923' }}><Spin size="large" /></div>;
+  }
+
   return (
-    <div>
-      <Title level={2}>보고서 대시보드</Title>
-      <Button type="primary" style={{ marginBottom: 16 }}>
-        보고서 생성
-      </Button>
-      <Table columns={columns} dataSource={reports} loading={loading} />
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px', color: 'white' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+        <div>
+          <Button type="text" icon={<LeftOutlined />} onClick={() => navigate('/')} style={{ color: '#a6adb4', marginRight: '16px' }}>홈으로</Button>
+          <Title level={2} style={{ color: 'white', margin: 0, display: 'inline-block' }}>보고서 대시보드</Title>
+        </div>
+        <Button type="primary" size="large" icon={<PlusOutlined />}>새 보고서 생성</Button>
+      </div>
+
+      {/* 최신 보고서: 반짝이는 은색 Card */}
+      {latestReport && (
+        <div style={{ marginBottom: '48px' }}>
+          <Card
+            hoverable
+            className="featured-report-card"
+            onClick={() => handleCardClick(latestReport._id)}
+          >
+            <Title level={3} style={{ color: '#2c3e50' }}>{latestReport.reportTitle || "제목 없음"}</Title>
+            <Paragraph style={{ color: '#34495e' }}>
+              생성일: {new Date(latestReport.createdAt).toLocaleString()}
+            </Paragraph>
+            <Tag color={latestReport.status === 'COMPLETED' ? 'blue' : 'gold'}>{latestReport.status}</Tag>
+          </Card>
+        </div>
+      )}
+
+      {/* 이전 보고서들: ChromaCard를 적용합니다. */}
+      <Title level={4} style={{ color: '#a6adb4', marginBottom: '16px' }}>이전 보고서 목록</Title>
+      <Row gutter={[24, 24]}>
+        {otherReports.map((report) => (
+          <Col key={report._id} xs={24} sm={12} md={8} lg={6}>
+            <ChromaCard report={report}>
+              <FileTextOutlined style={{ fontSize: '28px', color: '#1677ff', marginBottom: '16px' }} />
+              <Title level={5} style={{ color: 'inherit', fontWeight: 600, transition: 'color 0.4s ease' }}>
+                {report.reportTitle || "제목 없음"}
+              </Title>
+              <Paragraph style={{ color: 'inherit', fontSize: '12px', marginBottom: '12px', transition: 'color 0.4s ease' }}>
+                {new Date(report.createdAt).toLocaleString()}
+              </Paragraph>
+              <Tag color={report.status === 'COMPLETED' ? 'green' : 'gold'}>{report.status}</Tag>
+            </ChromaCard>
+          </Col>
+        ))}
+      </Row>
     </div>
   );
 }
