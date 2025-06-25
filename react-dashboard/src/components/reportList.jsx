@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Button, Typography, message, Spin, Card, Tag, Popconfirm } from 'antd';
-// [수정] CloseOutlined 아이콘을 삭제 버튼으로 사용합니다.
-import { PlusOutlined, FileTextOutlined, LeftOutlined, StarOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, FileTextOutlined, LeftOutlined, StarOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import ChromaCard from './chromaCard';
@@ -17,19 +16,65 @@ function ReportList() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const navigate = useNavigate();
 
-  const fetchReports = async () => { /* ... 이전과 동일 ... */ };
-  useEffect(() => { fetchReports(); }, []);
-  const handleDelete = async (reportId) => { /* ... 이전과 동일 ... */ };
-  const handleCardClick = (report) => { /* ... 이전과 동일 ... */ };
+  const fetchReports = async () => {
+    // 최초 로딩 시에만 스피너를 보여주도록 설정합니다.
+    // setLoading(true);
+    try {
+      const response = await axios.get('/api/users/1/reports');
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const sortedData = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setLatestReport(sortedData[0]);
+        setOtherReports(sortedData.slice(1));
+      } else {
+        setLatestReport(null);
+        setOtherReports([]);
+      }
+    } catch (error) {
+      message.error('보고서 목록을 불러오는 데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const handleDelete = async (reportId) => {
+    try {
+      await axios.delete(`/api/reports/${reportId}`);
+      message.success('보고서가 성공적으로 삭제되었습니다.');
+      fetchReports(); // 삭제 후 목록을 새로고침합니다.
+    } catch (error) {
+      message.error('보고서 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleCardClick = (report) => {
+    if (!report) return;
+    // 상세 페이지로 이동하며, 제목과 생성일 정보를 state로 전달합니다.
+    navigate(`/reports/${report._id}`, { 
+      state: { 
+        reportTitle: report.reportTitle,
+        createdAt: report.createdAt 
+      }
+    });
+  };
+
   const showCreateModal = () => setIsModalVisible(true);
   const handleModalClose = () => setIsModalVisible(false);
-  const handleReportCreated = () => { setTimeout(() => { fetchReports(); }, 2000); };
+  const handleReportCreated = () => {
+    // 보고서 생성 후, 백엔드 처리 시간을 기다렸다가 목록을 새로고침합니다.
+    setTimeout(() => {
+        fetchReports();
+    }, 2000);
+  };
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#101923' }}><Spin size="large" /></div>;
   }
-
-  // [수정] 재사용 가능한 삭제 버튼 UI를 생성하는 헬퍼 함수
+  
+  // 삭제 버튼 UI를 생성하는 헬퍼 함수
   const renderDeleteButton = (report) => (
     <Popconfirm
       title="정말로 이 보고서를 삭제하시겠습니까?"
@@ -37,40 +82,44 @@ function ReportList() {
       onCancel={(e) => e.stopPropagation()}
       okText="예"
       cancelText="아니오"
-      // [수정] 팝업창 스타일을 흰색 배경으로 지정
-      overlayInnerStyle={{ backgroundColor: 'white' }}
+      overlayInnerStyle={{backgroundColor: 'white'}}
     >
-      <CloseOutlined
-        className="report-delete-button"
-        onClick={(e) => e.stopPropagation()} 
-      />
+      <Button 
+        type="text" 
+        danger 
+        icon={<DeleteOutlined />} 
+        onClick={(e) => e.stopPropagation()}
+      >
+        삭제
+      </Button>
     </Popconfirm>
   );
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px', color: 'white' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-        {/* ... 헤더 부분은 이전과 동일 ... */}
+        <div>
+          <Button type="text" icon={<LeftOutlined />} onClick={() => navigate('/')} style={{ color: '#a6adb4', marginRight: '16px' }}>홈으로</Button>
+          <Title level={2} style={{ color: 'white', margin: 0, display: 'inline-block' }}>보고서 대시보드</Title>
+        </div>
+        <Button type="primary" size="large" icon={<PlusOutlined />} onClick={showCreateModal}>
+          새 보고서 생성
+        </Button>
       </div>
 
       {latestReport && (
         <div style={{ marginBottom: '48px' }}>
-          {/* [수정] 최신 카드: wrapper div로 감싸고 삭제 버튼을 추가합니다. */}
-          <div className="report-card-wrapper">
-            <Card
-              hoverable
-              className="featured-report-card"
-              onClick={() => handleCardClick(latestReport)}
-              // actions prop은 완전히 제거합니다.
-            >
-              <Title level={3} style={{ color: '#2c3e50' }}>{latestReport.reportTitle || "제목 없음"}</Title>
-              <Paragraph style={{ color: '#34495e' }}>
-                생성일: {new Date(latestReport.createdAt).toLocaleString()}
-              </Paragraph>
-              <Tag color={latestReport.status === 'COMPLETED' ? 'blue' : 'gold'}>{latestReport.status}</Tag>
-            </Card>
-            {renderDeleteButton(latestReport)}
-          </div>
+          <Title level={4} style={{ color: '#a6adb4', marginBottom: '16px' }}><StarOutlined /> 가장 최근 보고서</Title>
+          <Card
+            hoverable
+            className="featured-report-card"
+            onClick={() => handleCardClick(latestReport)}
+            actions={[renderDeleteButton(latestReport)]}
+          >
+            <Title level={3} style={{ color: '#2c3e50' }}>{latestReport.reportTitle || "제목 없음"}</Title>
+            <Paragraph style={{ color: '#34495e' }}>생성일: {new Date(latestReport.createdAt).toLocaleString()}</Paragraph>
+            <Tag color={latestReport.status === 'COMPLETED' ? 'blue' : 'gold'}>{latestReport.status}</Tag>
+          </Card>
         </div>
       )}
 
@@ -78,21 +127,33 @@ function ReportList() {
       <Row gutter={[24, 24]}>
         {otherReports.map((report) => (
           <Col key={report._id} xs={24} sm={12} md={8} lg={6}>
-            {/* [수정] 이전 카드: wrapper div로 감싸고 삭제 버튼을 추가합니다. */}
-            <div className="report-card-wrapper">
-                <ChromaCard report={report} onClick={() => handleCardClick(report)}>
-                    <FileTextOutlined style={{ fontSize: '28px', color: '#1677ff', marginBottom: '16px' }} />
-                    <Title level={5} style={{ color: 'inherit', fontWeight: 600, transition: 'color 0.4s ease' }}>{report.reportTitle || "제목 없음"}</Title>
-                    <Paragraph style={{ color: 'inherit', fontSize: '12px', marginBottom: '12px', transition: 'color 0.4s ease' }}>{new Date(report.createdAt).toLocaleString()}</Paragraph>
+            <Card
+              hoverable
+              style={{ backgroundColor: '#1a232e', border: '1px solid #314b68' }}
+              onClick={() => handleCardClick(report)}
+              actions={[renderDeleteButton(report)]}
+            >
+              <Card.Meta
+                title={<span style={{ color: 'white' }}>{report.reportTitle || "제목 없음"}</span>}
+                description={
+                  <>
+                    <Paragraph style={{ color: '#a6adb4', fontSize: '12px', marginBottom: '8px' }}>
+                      {new Date(report.createdAt).toLocaleString()}
+                    </Paragraph>
                     <Tag color={report.status === 'COMPLETED' ? 'green' : 'gold'}>{report.status}</Tag>
-                </ChromaCard>
-                {renderDeleteButton(report)}
-            </div>
+                  </>
+                }
+              />
+            </Card>
           </Col>
         ))}
       </Row>
 
-      <CreateReportModal visible={isModalVisible} onClose={handleModalClose} onSuccess={handleReportCreated} />
+      <CreateReportModal
+        visible={isModalVisible}
+        onClose={handleModalClose}
+        onSuccess={handleReportCreated}
+      />
     </div>
   );
 }
