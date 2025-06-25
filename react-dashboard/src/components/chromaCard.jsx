@@ -1,11 +1,9 @@
 import React, { useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import './chromaCard.css'; // [수정] import 경로를 소문자로 변경
+import './chromaCard.css';
 
-// 컴포넌트 함수 이름은 PascalCase 규칙을 유지합니다.
-function ChromaCard({ report, children }) {
+// [수정] 부모로부터 onClick 함수를 props로 전달받습니다.
+function ChromaCard({ report, children, onClick }) {
   const cardRef = useRef(null);
-  const navigate = useNavigate();
 
   const handleMouseMove = (e) => {
     const card = cardRef.current;
@@ -17,16 +15,12 @@ function ChromaCard({ report, children }) {
     card.style.setProperty('--y', `${y}px`);
   };
 
-  const handleClick = () => {
-    navigate(`/reports/${report._id}`);
-  };
-
   return (
     <div
       ref={cardRef}
       className="chroma-card"
       onMouseMove={handleMouseMove}
-      onClick={handleClick}
+      onClick={onClick} // [수정] 전달받은 onClick 함수를 div의 클릭 이벤트에 연결합니다.
       style={{ cursor: 'pointer' }}
     >
       <div className="chroma-card-content">
