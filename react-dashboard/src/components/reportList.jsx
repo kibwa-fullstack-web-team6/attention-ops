@@ -4,6 +4,7 @@ import { PlusOutlined, DeleteOutlined, FileTextOutlined, LeftOutlined } from '@a
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import ChromaCard from './chromaCard';
+import CreateReportModal from './createReportModal'; // 1. 새로 만든 모달 컴포넌트를 import 합니다.
 import './reportList.css';
 
 const { Title, Paragraph } = Typography;
@@ -12,10 +13,11 @@ function ReportList() {
   const [latestReport, setLatestReport] = useState(null);
   const [otherReports, setOtherReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isModalVisible, setIsModalVisible] = useState(false); // 2. 모달의 표시 상태를 관리할 state를 추가합니다.
   const navigate = useNavigate();
 
   const fetchReports = async () => {
-    setLoading(true);
+    // setLoading(true)는 이제 필요 없을 수 있습니다. 목록 새로고침 시에는 스피너가 돌지 않게 합니다.
     try {
       const response = await axios.get('/api/users/1/reports');
       if (Array.isArray(response.data) && response.data.length > 0) {
@@ -35,17 +37,26 @@ function ReportList() {
   }, []);
 
   const handleDelete = async (reportId) => {
-    try {
-      await axios.delete(`/api/reports/${reportId}`);
-      message.success('보고서가 성공적으로 삭제되었습니다.');
-      fetchReports();
-    } catch (error) {
-      message.error('보고서 삭제에 실패했습니다.');
-    }
+    // ...
   };
 
   const handleCardClick = (reportId) => {
-    navigate(`/reports/${reportId}`);
+    // ...
+  };
+
+  const showCreateModal = () => {
+    setIsModalVisible(true);
+  };
+
+  const handleModalClose = () => {
+    setIsModalVisible(false);
+  };
+
+  const handleReportCreated = () => {
+    // 보고서 생성 후, 2초 뒤에 목록을 새로고침하여 백엔드 처리 시간을 기다립니다.
+    setTimeout(() => {
+        fetchReports();
+    }, 2000);
   };
 
   if (loading) {
@@ -59,10 +70,13 @@ function ReportList() {
           <Button type="text" icon={<LeftOutlined />} onClick={() => navigate('/')} style={{ color: '#a6adb4', marginRight: '16px' }}>홈으로</Button>
           <Title level={2} style={{ color: 'white', margin: 0, display: 'inline-block' }}>보고서 대시보드</Title>
         </div>
-        <Button type="primary" size="large" icon={<PlusOutlined />}>새 보고서 생성</Button>
+        {/* 3. 버튼 클릭 시 모달을 열도록 onClick 이벤트를 연결합니다. */}
+        <Button type="primary" size="large" icon={<PlusOutlined />} onClick={showCreateModal}>
+          새 보고서 생성
+        </Button>
       </div>
 
-      {/* 최신 보고서: 반짝이는 은색 Card */}
+      {/* 최신 보고서 섹션 */}
       {latestReport && (
         <div style={{ marginBottom: '48px' }}>
           <Card
@@ -79,7 +93,7 @@ function ReportList() {
         </div>
       )}
 
-      {/* 이전 보고서들: ChromaCard를 적용합니다. */}
+      {/* 이전 보고서들 섹션 */}
       <Title level={4} style={{ color: '#a6adb4', marginBottom: '16px' }}>이전 보고서 목록</Title>
       <Row gutter={[24, 24]}>
         {otherReports.map((report) => (
@@ -97,6 +111,13 @@ function ReportList() {
           </Col>
         ))}
       </Row>
+
+      {/* 4. 모달 컴포넌트를 페이지에 렌더링하고, 필요한 함수들을 props로 전달합니다. */}
+      <CreateReportModal
+        visible={isModalVisible}
+        onClose={handleModalClose}
+        onSuccess={handleReportCreated}
+      />
     </div>
   );
 }
