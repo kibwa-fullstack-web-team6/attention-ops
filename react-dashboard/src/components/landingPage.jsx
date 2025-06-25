@@ -32,7 +32,7 @@ function LandingPage() {
               </svg>
               <h4 className="text-xl font-semibold text-white">Attention</h4> 
             </div>
-            <a href="https://web.hwichan.shop/mainService" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-400 transition duration-300 ease-in-out px-3 py-2 rounded-md font-medium">
+            <a href="https://alb.hwichan.shop/mainService" target="_blank" rel="noopener noreferrer" className="text-white hover:text-blue-400 transition duration-300 ease-in-out px-3 py-2 rounded-md font-medium">
               세션 시작
             </a>
             <Link to="/reports" className="text-white hover:text-blue-400 transition duration-300 ease-in-out px-3 py-2 rounded-md font-medium">
@@ -62,7 +62,7 @@ function LandingPage() {
             </p>
             {/* [수정] 메인 페이지 중앙 버튼을 GlassButton으로 교체합니다. */}
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 justify-center mt-32">
-              <GlassButton href="https://web.hwichan.shop/mainService" size="large">
+              <GlassButton href="https://alb.hwichan.shop/mainService" size="large">
                 세션 시작하기
               </GlassButton>
               <GlassButton to="/reports" size="large">
