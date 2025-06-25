@@ -102,3 +102,7 @@ button:focus-visible {
 .animate-fade-in-blur {
   animation: fade-in-blur 1.5s ease-out forwards;
 }
+
+.animate-fade-in-blur-delayed {
+  animation: fade-in-blur 1.5s ease-out forwards 0.5s; /* 0.5초 지연 추가 */
+}
