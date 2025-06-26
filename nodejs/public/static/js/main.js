@@ -311,7 +311,7 @@ function endSession() {
     if (websocket) {
         websocket.close();
     }
-    setTimeout(() => { window.location.href = "/"; }, 500);
+    setTimeout(() => { window.location.href = "https://dashboard.hwichan.shop/"; }, 500);
 }
 
 /**
