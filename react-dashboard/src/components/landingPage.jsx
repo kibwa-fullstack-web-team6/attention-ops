@@ -58,7 +58,7 @@ function LandingPage() {
               최고의 집중력을 깨우세요
             </h1>
             <p className="text-lg md:text-xl text-gray-300 mb-8 opacity-0 blur-2xl animate-fade-in-blur-delayed">
-              AI의 힘을 활용하여 실시간으로 집중력을 분석하고, 맞춤형 코칭을 통해 집중력을 향상시키세요.
+              실시간으로 집중력을 분석하고, 데이터 기반 AI 맞춤형 코칭을 통해 집중력을 향상시키세요.
             </p>
             {/* [수정] 메인 페이지 중앙 버튼을 GlassButton으로 교체합니다. */}
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 justify-center mt-32">
