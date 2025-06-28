@@ -1,0 +1,67 @@
+/* 최신 보고서 카드 스타일 (이전과 동일) */
+.featured-report-card {
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #c0c0c0;
+  background: linear-gradient(145deg, #e8e8e8, #b0b0b0);
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.featured-report-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(192, 192, 192, 0.3);
+}
+.featured-report-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -75%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(25deg);
+  animation: shine 4s infinite linear;
+  pointer-events: none;
+}
+@keyframes shine {
+  0% { left: -75%; }
+  100% { left: 125%; }
+}
+.featured-report-card .ant-card-body {
+    background: transparent;
+    position: relative;
+    z-index: 2;
+    padding: 24px;
+}
+
+/* --- [추가/수정] --- */
+
+.report-card-wrapper {
+    position: relative;
+}
+
+/* 카드 우상단의 삭제 아이콘 버튼 스타일 */
+.report-delete-button {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10; /* 카드 위에 위치하도록 */
+    font-size: 16px;
+    color: #a6adb4; /* 기본 아이콘 색상 (은은한 회색) */
+    cursor: pointer;
+    transition: color 0.3s ease, transform 0.3s ease;
+    background: rgba(40, 40, 40, 0.5); /* 아이콘이 잘 보이도록 약간의 배경 추가 */
+    border-radius: 50%;
+    padding: 6px;
+}
+
+.report-delete-button:hover {
+    color: #ff7875; /* 호버 시 색상 (밝은 빨강) */
+    transform: scale(1.2);
+}

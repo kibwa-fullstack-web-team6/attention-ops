@@ -1,0 +1,53 @@
+{
+"reportId": "report-28910c9a-bc60-44a3-8643-e2dc7e9a2936",
+"userId": "1",
+"dateRange": {
+"start": "2025-06-01",
+"end": "2025-06-21"
+},
+"summary": {
+"totalSessions": 10
+},
+"sessions": [
+{
+"sessionId": "1cea47de-3664-4a5c-b6cc-a31f3e5d2365",
+"eventCounts": { "yawn": 0, "distraction": 2, "drowsiness": 1 }
+},
+{
+"sessionId": "67e8e762-9c10-4a73-bfce-43138d105a87",
+"eventCounts": { "yawn": 2, "distraction": 3, "drowsiness": 2 }
+},
+{
+"sessionId": "4c37aced-18c6-47ac-a5f5-bb6f8e797847",
+"eventCounts": { "yawn": 7, "distraction": 2, "drowsiness": 2 }
+},
+{
+"sessionId": "87a3a784-5262-44c2-b572-4839851aa098",
+"eventCounts": { "yawn": 0, "distraction": 6, "drowsiness": 5 }
+},
+{
+"sessionId": "abf75731-217a-4fb4-866b-c76630a4e650",
+"eventCounts": { "yawn": 0, "distraction": 5, "drowsiness": 3 }
+},
+{
+"sessionId": "82f2f154-40a4-4f4c-8387-2ada76ff4a00",
+"eventCounts": { "yawn": 4, "distraction": 5, "drowsiness": 0 }
+},
+{
+"sessionId": "cb7a86cb-3394-434c-b89d-6d9024fbf3b5",
+"eventCounts": { "yawn": 0, "distraction": 3, "drowsiness": 3 }
+},
+{
+"sessionId": "e3e915eb-5af5-4341-bb53-35265c40ad0a",
+"eventCounts": { "yawn": 5, "distraction": 6, "drowsiness": 6 }
+},
+{
+"sessionId": "76d9921a-8229-429b-a348-f3c8eb6020fd",
+"eventCounts": { "yawn": 4, "distraction": 13, "drowsiness": 2 }
+},
+{
+"sessionId": "65a7c4ef-f5b6-4f77-bdf1-515df2301c54",
+"eventCounts": { "yawn": 12, "distraction": 1, "drowsiness": 2 }
+}
+]
+}

@@ -3,6 +3,7 @@ import os
 import json
 import time
 from pymongo import MongoClient, errors
+import sys
 
 # --- 환경 설정 ---
 # Docker Compose에서 주입한 환경 변수를 읽어옵니다.

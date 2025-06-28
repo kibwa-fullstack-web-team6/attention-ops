@@ -1,0 +1,82 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+@keyframes fadeInBlur {
+  from {
+    opacity: 0;
+    filter: blur(1rem);
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInBlurDelayed {
+  from {
+    opacity: 0;
+    filter: blur(1rem);
+    transform: translateY(-10px);
+  }
+  50% { /* 애니메이션 중간까지는 투명 상태 유지 */
+    opacity: 0;
+    filter: blur(1rem);
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-blur {
+  animation: fadeInBlur 1s ease-out forwards;
+}
+
+.animate-fade-in-blur-delayed {
+  /* 0.5초 지연 후 1초 동안 애니메이션 실행 */
+  animation: fadeInBlurDelayed 1.5s ease-out forwards; 
+}
