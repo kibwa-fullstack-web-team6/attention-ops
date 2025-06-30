@@ -1,0 +1,36 @@
+# 1. Deployment: Node.js 애플리케이션 배포 명세
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-app
+  template:
+    metadata:
+      labels:
+        app: node-app
+    spec:
+      containers:
+        - name: node-app-container
+          image: "hwengdeong/attention-app:latest"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+---
+# 2. Service: Node.js 파드들을 위한 내부 네트워크 엔드포인트
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-app-service
+spec:
+  type: NodePort
+  selector:
+    app: node-app
+  ports:
+    - protocol: TCP
+      port: 80 
+      targetPort: 3000 
+      nodePort: 31304

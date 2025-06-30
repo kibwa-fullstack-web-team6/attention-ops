@@ -1,0 +1,108 @@
+/* src/index.css 또는 public/index.css */
+
+/* 모든 요소에 box-sizing 적용 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* html과 body에 전체 화면을 채우도록 설정 */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%; /* 뷰포트 전체 높이를 차지하도록 설정 */
+  overflow-x: hidden; /* 가로 스크롤바 방지 */
+}
+
+body {
+  background-color: #101923; /* 전체 페이지의 기본 배경색을 우리 테마 색상으로 지정 */
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* :root 설정 (선택 사항 - body에 이미 설정되어 있으므로 필요 없을 수도 있음) */
+:root {
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  /* background-color: #242424; - 이 부분은 body에서 오버라이드되므로 주석 처리하거나 제거 */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* #root 스타일에 대한 수정 */
+#root {
+  /* max-width, margin, padding, text-align 속성 제거 또는 주석 처리 */
+  /* max-width: 1280px; */
+  /* margin: 0 auto; */
+  /* padding: 2rem; */
+  /* text-align: center; */
+  width: 100%; /* #root가 전체 너비를 차지하도록 설정 */
+  min-height: 100vh; /* 최소 높이를 뷰포트 높이로 설정하여 footer가 항상 하단에 위치하도록 */
+  display: flex; /* flexbox를 사용하여 자식 요소가 공간을 채우도록 함 */
+  flex-direction: column; /* 세로 방향으로 정렬 */
+}
+
+/* 아래는 기존의 App.css 내용에서 가져온 부분 */
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+  
+@keyframes fade-in-blur {
+  0% { filter: blur(20px); opacity: 0; }
+  100% { filter: blur(0); opacity: 1; }
+}
+
+.animate-fade-in-blur {
+  animation: fade-in-blur 1.5s ease-out forwards;
+}
+
+.animate-fade-in-blur-delayed {
+  animation: fade-in-blur 1.5s ease-out forwards 0.5s; /* 0.5초 지연 추가 */
+}

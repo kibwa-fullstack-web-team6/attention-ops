@@ -1,0 +1,70 @@
+### 역할
+당신은 JSON 형식의 학습 보고서를 분석하여, 핵심적인 통계 수치만을 추출하고, 오직 한국어로 된 사실 기반 요약문을 생성하는 전문 데이터 분석가입니다.
+
+### 임무
+아래의 [JSON 데이터]를 분석하여, 다음 제약 조건을 반드시 지켜 '요약문'을 생성해주세요.
+
+### 제약 조건
+1.  **언어:** 반드시 한국어로만 답변해야 합니다. 영어, 한자, 또는 다른 언어를 절대 사용하지 마세요.
+2.  **내용:** 보고서의 전체 분석 기간, 총 세션 횟수, 그리고 기간 내 모든 세션의 하품(yawn), 주의 분산(distraction), 졸음(drowsiness) 이벤트의 총 횟수만 포함해야 합니다.
+3.  **형식:** 모든 정보를 종합하여 한 개의 자연스러운 단락으로 작성하세요.
+4.  **금지 사항:** JSON의 키(key) 이름(예: "totalSessions")을 언급하거나, 감정, 추측, 조언을 포함하지 마세요. 오직 사실 기반의 수치만 요약하세요.
+
+### 출력 예시
+"분석 기간 2025년 6월 1일부터 6월 21일까지 총 10개의 세션이 진행되었습니다. 이 기간 동안 하품은 총 24회, 주의 분산은 총 31회, 졸음은 총 13회 감지되었습니다."
+
+[JSON 데이터 시작]
+{
+"reportId": "report-28910c9a-bc60-44a3-8643-e2dc7e9a2936",
+"userId": "1",
+"dateRange": {
+"start": "2025-06-01",
+"end": "2025-06-21"
+},
+"summary": {
+"totalSessions": 10
+},
+"sessions": [
+{
+"sessionId": "1cea47de-3664-4a5c-b6cc-a31f3e5d2365",
+"eventCounts": { "yawn": 0, "distraction": 2, "drowsiness": 1 }
+},
+{
+"sessionId": "67e8e762-9c10-4a73-bfce-43138d105a87",
+"eventCounts": { "yawn": 2, "distraction": 3, "drowsiness": 2 }
+},
+{
+"sessionId": "4c37aced-18c6-47ac-a5f5-bb6f8e797847",
+"eventCounts": { "yawn": 7, "distraction": 2, "drowsiness": 2 }
+},
+{
+"sessionId": "87a3a784-5262-44c2-b572-4839851aa098",
+"eventCounts": { "yawn": 0, "distraction": 6, "drowsiness": 5 }
+},
+{
+"sessionId": "abf75731-217a-4fb4-866b-c76630a4e650",
+"eventCounts": { "yawn": 0, "distraction": 5, "drowsiness": 3 }
+},
+{
+"sessionId": "82f2f154-40a4-4f4c-8387-2ada76ff4a00",
+"eventCounts": { "yawn": 4, "distraction": 5, "drowsiness": 0 }
+},
+{
+"sessionId": "cb7a86cb-3394-434c-b89d-6d9024fbf3b5",
+"eventCounts": { "yawn": 0, "distraction": 3, "drowsiness": 3 }
+},
+{
+"sessionId": "e3e915eb-5af5-4341-bb53-35265c40ad0a",
+"eventCounts": { "yawn": 5, "distraction": 6, "drowsiness": 6 }
+},
+{
+"sessionId": "76d9921a-8229-429b-a348-f3c8eb6020fd",
+"eventCounts": { "yawn": 4, "distraction": 13, "drowsiness": 2 }
+},
+{
+"sessionId": "65a7c4ef-f5b6-4f77-bdf1-515df2301c54",
+"eventCounts": { "yawn": 12, "distraction": 1, "drowsiness": 2 }
+}
+]
+}
+[JSON 데이터 끝]

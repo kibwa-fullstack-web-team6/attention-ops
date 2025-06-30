@@ -1,0 +1,115 @@
+name: Docker CI/CD for Attention App
+
+on:
+  push:
+    branches:
+      
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push nodejs-app image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nodejs
+          file: ./nodejs/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-app:latest
+
+      - name: Build and push websocket image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./websocket
+          file: ./websocket/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-websocket:latest
+
+      - name: Build and push datasaver image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./sessionDataSave 
+          file: ./sessionDataSave/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/attention-data-saver:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 instance
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_KEY }}
+          script: |
+            cd /tmp/attention-ops
+            echo Start deploy Attention project with docker
+            echo "MONGO_HOST=${{ secrets.MONGO_HOST }}" > .env
+            echo "MONGO_PORT=${{ secrets.MONGO_PORT }}" >> .env
+            echo "MONGO_USER=${{ secrets.MONGO_USER }}" >> .env
+            echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
+            echo "MONGO_DB_NAME=${{ secrets.MONGO_DB_NAME }}" >> .env
+            DOCKERHUB_USER=${{ secrets.DOCKERHUB_USERNAME }}
+            
+            docker login -u $DOCKERHUB_USER -p ${{ secrets.DOCKERHUB_TOKEN }}
+            
+            docker pull $DOCKERHUB_USER/attention-app:latest
+            docker pull $DOCKERHUB_USER/attention-websocket:latest
+            docker pull $DOCKERHUB_USER/attention-data-saver:latest
+            docker system prune -a -f
+            docker compose --env-file .env up -d --remove-orphans
+
+            echo "🚀 Attention project deployed with Docker successfully!"
+
+            echo "Start deploy Attention project with Kubernetes."
+
+          
+            kubectl delete secret mongodb-secret --ignore-not-found
+            kubectl create secret generic mongodb-secret \
+              --from-literal=MONGO_USER="${{ secrets.MONGO_USER }}" \
+              --from-literal=MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+            echo "✅ MongoDB Secret created."
+
+
+            kubectl delete configmap data-saver-configmap --ignore-not-found
+            kubectl create configmap data-saver-configmap \
+              --from-literal=REDIS_HOST="${{ secrets.REDIS_HOST }}" \
+              --from-literal=REDIS_PORT="${{ secrets.REDIS_PORT }}" \
+              --from-literal=MONGO_HOST="${{ secrets.MONGO_HOST }}" \
+              --from-literal=MONGO_PORT="${{ secrets.MONGO_PORT }}" \
+              --from-literal=MONGO_DB_NAME="${{ secrets.MONGO_DB_NAME }}"
+            echo "✅ Data Saver ConfigMap created."
+
+ 
+            kubectl delete secret port-secret --ignore-not-found
+            kubectl create secret generic port-secret \
+              --from-literal=K8S_NODE_APP_NODEPORT="${{ secrets.K8S_NODE_APP_NODEPORT }}" \
+              --from-literal=K8S_WEBSOCKET_APP_NODEPORT="${{ secrets.K8S_WEBSOCKET_APP_NODEPORT }}"
+            echo "✅ Port Secret created."
+
+            kubectl delete secret dockerhub-secret --ignore-not-found
+            kubectl create secret docker-registry dockerhub-secret \
+              --docker-server=https://index.docker.io/v1/ \
+              --docker-username=${{ secrets.DOCKERHUB_USERNAME }} \
+              --docker-password=${{ secrets.DOCKERHUB_TOKEN }} \
+              --docker-email=your-email@example.com
+            echo "✅ Docker Hub Secret created."
+
+
+            cd k8s
+            kubectl apply -f .
+            echo "🚀 Attention project deployed with Kubernetes successfully!"
+            
+             
+    

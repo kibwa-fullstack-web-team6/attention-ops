@@ -3,183 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attention 실시간 분석</title>
+    <title>Attention - Focus Mode</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            background-color: #f0f2f5;
-            margin: 0;
-            padding: 2em;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: #333;
-        }
-        h1 {
-            color: #1a202c;
-            margin-bottom: 1.5em;
-        }
-        #app-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2em;
-            width: 100%;
-            max-width: 1200px;
-        }
-        #main-content {
-            flex: 3;
-            min-width: 640px;
-        }
-        #video-container {
-            position: relative;
-            width: 100%;
-            padding-top: 75%; /* 4:3 Aspect Ratio */
-            background-color: black;
-            border-radius: 12px;
+            font-family: 'Inter', sans-serif;
+            background-color: #101923;
+            color: #f0f2f5;
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        #webcam-video, #landmark-canvas {
+        .video-container {
+            position: relative;
+            width: 70%; /* 현재 너비를 70%로 조정 */
+            max-width: 672px; /* 960px의 70%인 672px로 최대 너비 조정 */
+            aspect-ratio: 16 / 9;
+            transition: opacity 0.3s ease-in-out;
+        }
+        #faceCanvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            transform: scaleX(-1);
         }
-        #control-panel {
-            flex: 1;
-            min-width: 300px;
-            background-color: white;
-            border-radius: 12px;
-            padding: 1.5em;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            align-self: flex-start;
+        #webcam {
+             width: 100%;
+             height: 100%;
+             object-fit: cover;
+             border-radius: 0.75rem;
+             border: 1px solid #314b68;
         }
-        #control-panel h3 {
-            margin-top: 0;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 0.75em;
-            margin-bottom: 1em;
-            font-size: 1.25em;
-            color: #2d3748;
+        /* 카메라 화면 내부의 컨트롤 버튼 그룹 (카메라 & 일시정지) */
+        .controls-container {
+            transition: opacity 0.3s ease-in-out;
+            position: absolute; 
+            bottom: 8px; /* 카메라 화면 하단 중앙 */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000; 
+            display: flex; /* 가로로 정렬 */
+            align-items: center; 
+            justify-content: center;
+            opacity: 0; /* 초기 숨김, hover 시 나타남 */
         }
-        .control-group {
-            margin-bottom: 2em;
+        .video-wrapper:hover .controls-container {
+            opacity: 1;
         }
-        .control-group button {
-            width: 100%;
-            font-size: 1em;
-            font-weight: 600;
-            padding: 0.8em 1em;
-            margin-bottom: 0.75em;
-            cursor: pointer;
-            border: none;
-            background-color: #edf2f7;
-            color: #4a5568;
-            border-radius: 8px;
-            transition: background-color 0.2s, transform 0.1s;
+
+        /* 우측 상단 버튼 컨테이너 스타일 - position:fixed로 변경 */
+        .top-right-main-buttons { 
+            position: fixed; /* <--- fixed로 변경 */
+            top: 19rem; /* 상단에서 1rem (16px) */
+            right: 3rem; /* 우측에서 3rem (48px) */
+            z-index: 1000; 
+            display: flex;
+            flex-direction: column; /* 세로로 쌓이도록 */
+            gap: 13px; /* 버튼 간 간격 13px */
+            align-items: flex-end; /* 버튼 자체를 우측에 정렬 */
         }
-        .control-group button:hover {
-            background-color: #e2e8f0;
+        .top-right-main-buttons button {
+            width: 180px; /* 버튼 너비 조정 */
+            padding: 10px 16px; /* 패딩 조정 */
+            font-size: 1rem; /* 글자 크기 조정 (text-base) */
+            line-height: 1.5rem; /* line-height 조정 */
         }
-        .control-group button:active {
-            transform: scale(0.98);
+        .top-right-main-buttons button svg {
+            width: 20px; /* 아이콘 크기 조정 */
+            height: 20px;
         }
-        #end-session-button {
-            background-color: #fed7d7;
-            color: #c53030;
+
+        /* 경고 리스트 위치 및 크기 변경 - position:fixed로 변경 */
+        #warningList {
+            position: fixed; /* <--- fixed로 변경 */
+            top: 20px; /* 최상단에서 20px 떨어지게 조정 */
+            left: 1rem; /* 좌측에서 1rem (16px) */
+            right: auto; /* 기존 right 속성 제거 */
+            width: 280px; /* 가로 길이 축소 */
+            bottom: 16px; /* 하단에서 16px 떨어지게 (body의 p-4 하단 패딩과 비슷하게) */
+            height: auto; /* top/bottom으로 높이 제어 */
+            background-color: rgba(26, 35, 46, 0.8); /* #1a232e/80 */
+            backdrop-filter: blur(8px); /* backdrop-blur-md 에 해당 */
+            border: 1px solid #314b68;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-xl 에 해당 */
+            
+            /* 초기 숨김 상태와 애니메이션 */
+            opacity: 0; 
+            transform: scale(0.95); 
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            z-index: 999; /* 버튼들보다 약간 낮게 설정하여 경고창이 위에 뜰 때 버튼이 가려지지 않게 함 */
+            
+            display: flex; /* 내부 요소가 flex item이 되도록 설정 */
+            flex-direction: column; /* 내부 요소들을 세로로 정렬 */
         }
-        #end-session-button:hover {
-            background-color: #feb2b2;
+
+        /* JavaScript가 클래스를 제거하면 이 스타일이 적용됨 */
+        #warningList:not(.opacity-0) {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
         }
-        #session-timer-display {
-            font-size: 2em;
-            font-weight: bold;
-            text-align: center;
-            padding: 0.5em;
-            background-color: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            margin-bottom: 1em;
-            color: #2d3748;
+
+        .toastify.on {
+            background: #1a232e;
+            border: 1px solid #314b68;
+            border-radius: 0.5rem;
+            color: #f0f2f5;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         }
-        #warning-list-container {
-            background-color: #fafafa;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 1em;
-            display: none; /* 초기에는 숨김 */
+        .modal-overlay {
+            transition: opacity 0.2s ease-in-out;
         }
-        #warning-list {
-            list-style-type: none;
-            padding: 0;
-            margin: 0;
-            max-height: 150px;
-            overflow-y: auto;
-            font-size: 0.9em;
-        }
-        #warning-list li {
-            padding: 0.5em 0;
-            border-bottom: 1px solid #edf2f7;
-            color: #4a5568;
-        }
-        #warning-list li:last-child {
-            border-bottom: none;
-        }
-        #status {
-            margin-top: 1.5em;
-            text-align: center;
-            width: 100%;
-            font-size: 1.1em;
-            font-weight: 500;
-            color: #4a5568;
+        #quote-display {
+            transition: opacity 1s ease-in-out;
+            z-index: 10; 
         }
     </style>
-    <!-- MediaPipe 라이브러리 -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 </head>
-<body>
-    <h1>✨ 실시간 집중도 분석 ✨</h1>
+<body class="flex items-center justify-center min-h-screen">
 
-    <div id="app-container">
-        <!-- 메인 콘텐츠 (웹캠 영상) -->
-        <div id="main-content">
-            <div id="video-container">
-                <video id="webcam-video" autoplay muted playsinline style="display: none;"></video>
-                <canvas id="landmark-canvas"></canvas>
-            </div>
+    <div id="quote-display" class="absolute inset-0 flex flex-col items-center justify-center text-center text-white px-4 transition-opacity duration-1000 ease-in-out pointer-events-none z-10">
         </div>
 
-        <!-- 컨트롤 패널 -->
-        <div id="control-panel">
-            <div class="control-group">
-                <h3>세션 시간</h3>
-                <div id="session-timer-display">00:00:00</div>
-                <button id="time-mode-button" title="기능 준비 중">남은 시간 모드</button>
-                <button id="set-time-limit-button" title="기능 준비 중">시간 제한 설정</button>
-            </div>
-            
-            <div class="control-group">
-                <h3>세션 제어</h3>
-                <button id="pause-resume-button">일시정지</button>
-                <button id="end-session-button">세션 종료</button>
+    <div class="top-right-main-buttons">
+        <button id="end-session" class="flex items-center justify-start space-x-2 rounded-xl bg-red-600/80 hover:bg-red-500 transition-colors text-white shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect></svg>
+            <span>세션 종료</span>
+        </button>
+
+        <button id="toggleWarningList" class="flex items-center justify-start space-x-2 rounded-xl bg-blue-700/80 hover:bg-blue-600 transition-colors text-white shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" x2="12" y1="9" y2="13"></line><line x1="12" x2="12.01" y1="17" y2="17"></line></svg>
+            <span>경고 리스트 확인</span>
+        </button>
+    </div>
+
+    <div id="warningList">
+        <h3 class="text-lg font-semibold mb-4 text-[#f0f2f5] text-center">실시간 감지 로그</h3>
+        <div id="warningLog" class="h-full overflow-y-auto text-sm text-[#a6adb4] space-y-2 flex-grow min-h-0">
+        </div>
+    </div>
+
+    <div id="main-content" class="w-full h-full flex flex-col items-center justify-center p-4 md:p-8"> 
+        
+        <div class="video-wrapper relative w-full max-w-5xl flex items-center justify-center">
+
+            <div id="video-container" class="video-container shadow-2xl">
+                <video id="webcam" playsinline autoplay muted style="transform: scaleX(-1);"></video>
+                <canvas id="faceCanvas"></canvas>
             </div>
 
-            <div class="control-group">
-                <h3>경고 목록</h3>
-                <div id="warning-list-container">
-                    <ul id="warning-list">
-                        <!-- 경고 메시지가 여기에 추가됩니다. -->
-                    </ul>
+            <div class="absolute top-4 left-1/2 -translate-x-1/2 w-auto flex items-center space-x-4 bg-black/30 backdrop-blur-sm px-6 py-2 rounded-full border border-gray-700/50 z-20">
+                <div id="status" class="text-lg font-semibold text-white">세션 시작 중...</div>
+                <div class="w-px h-6 bg-gray-600"></div>
+                <div id="sessionTimerDisplay" class="text-lg font-mono text-white">00:00:00</div>
+            </div>
+
+            <div class="controls-container">
+                <div class="flex items-center space-x-4 bg-black/30 backdrop-blur-sm p-3 rounded-full border border-gray-700/50">
+                    <button id="toggle-camera" class="w-12 h-12 flex items-center justify-center bg-transparent hover:bg-blue-500/20 rounded-full transition-colors text-white">
+                    </button>
+                    <button id="pause-resume" class="w-12 h-12 flex items-center justify-center bg-transparent hover:bg-blue-500/20 rounded-full transition-colors text-white">
+                    </button>
                 </div>
-                <button id="toggle-warning-list-button">경고 목록 보기</button>
+            </div>
+
+        </div> 
+        </div>
+    <div id="endSessionModal" class="modal-overlay fixed inset-0 bg-black/60 flex items-center justify-center p-4 opacity-0 pointer-events-none">
+        <div class="bg-[#1a232e] rounded-lg shadow-xl w-full max-w-sm p-6 border border-[#314b68]">
+            <h3 class="text-xl font-bold text-white mb-2">세션 종료</h3>
+            <p class="text-[#a6adb4] mb-6">정말로 현재 집중 세션을 종료하시겠습니까? 데이터가 저장되고 대시보드로 이동합니다.</p>
+            <div class="flex justify-end space-x-4">
+                <button id="cancelEndSession" class="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-500 transition-colors">취소</button>
+                <button id="confirmEndSession" class="px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 transition-colors">종료</button>
             </div>
         </div>
     </div>
 
-    <p id="status">페이지 로드 중...</p>
+    <script type="module" src="/static/js/main.js"></script>
 
-    <script src="/static/js/main-v1.js"></script>
 </body>
 </html>
