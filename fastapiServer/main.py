@@ -1,14 +1,15 @@
 from fastapi import FastAPI
+import uvicorn
+from apiRouter import router as api_router
 
-# FastAPI 앱 인스턴스 생성
 app = FastAPI()
 
-# 루트 경로("/")로 GET 요청이 오면 실행되는 함수
-@app.get("/")
-def read_root():
-    return {"Hello": "World from FastAPI"}
+app.include_router(api_router, prefix="/api")
 
-# /health 경로로 GET 요청이 오면 "OK"를 반환 (상태 검사용)
-@app.get("/health")
-def health_check():
-    return {"status": "OK"}
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+@app.get("/api/health")
+def healthCheck():
+    print("health check")
+    return {"status": 200, "message": "OK"}

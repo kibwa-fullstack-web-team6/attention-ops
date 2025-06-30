@@ -1,0 +1,53 @@
+.chroma-card {
+  /* 카드 기본 스타일 */
+  background-color: #1a232e;
+  border: 1px solid #314b68;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.chroma-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* 마우스 커서의 빛 효과를 담당하는 가상 요소 */
+.chroma-card::before {
+  content: "";
+  position: absolute;
+  left: var(--x, 50%); /* JS에서 마우스 x좌표를 받아옵니다 */
+  top: var(--y, 50%);  /* JS에서 마우스 y좌표를 받아옵니다 */
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  background-image: radial-gradient(
+    circle,
+    rgba(96, 165, 250, 0.3) 0%, /* 빛의 중심 (밝은 파랑) */
+    rgba(96, 165, 250, 0) 60%  /* 빛의 바깥쪽 (투명) */
+  );
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* 카드에 호버했을 때만 빛 효과를 보여줍니다 */
+.chroma-card:hover::before {
+  opacity: 1;
+}
+
+/* 카드 내부 컨텐츠는 빛 효과 위에 위치해야 합니다 */
+.chroma-card-content {
+  position: relative;
+  z-index: 2;
+  padding: 24px;
+  /* 어두운 상태일 때 텍스트를 흐리게 처리 */
+  color: #a6adb4;
+  transition: color 0.4s ease;
+}
+
+.chroma-card:hover .chroma-card-content {
+  /* 호버 시 텍스트를 밝게 처리 */
+  color: white;
+}

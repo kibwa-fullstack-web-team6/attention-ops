@@ -4,7 +4,7 @@ nodejs/node_modules/*
 
 dataStorage
 
-
+/react-dashboard/node_modules
 
 ## rust
 
@@ -13,3 +13,6 @@ websocket/target/
 .env
 
 docker-compose.yml
+
+
+/dataScripts/augmented_reports
