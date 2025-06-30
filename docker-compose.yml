@@ -1,7 +1,11 @@
+# 개발 및 기능 테스트를 위한 docker-compose.yml
+
 services:
   nodejs-app:
     container_name: attention-nodejs
-    image: hwengdeong/attention-app:latest
+    build:
+      context: ./nodejs
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     restart: always
@@ -20,23 +24,25 @@ services:
 
   session-data-saver:
     container_name: attention-data-saver
-    image: hwengdeong/attention-data-saver:latest
+    build:
+      context: ./sessionDataSave
+      dockerfile: Dockerfile
     restart: always
     env_file:
-      - ./.env
-    networks:
-      - attention-network
+      - ./.env # DB 접속 정보는 .env 파일에서 읽어옵니다.
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-    volumes:
-      - ./dataStorage:/app/saved_data
+    networks:
+      - attention-network
     depends_on:
       - redis
 
   websocket:
     container_name: attention-websocket
-    image: hwengdeong/attention-websocket:latest  
+    build:
+      context: ./websocket
+      dockerfile: Dockerfile
     ports:
       - "9001:9001"
     restart: always
@@ -45,9 +51,31 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-
     depends_on:
       - redis
+      
+  fastapi-server:
+    build:
+      context: ./fastapiServer  # Dockerfile이 있는 디렉토리 경로
+    container_name: fastapi-server
+    env_file:
+      - ./fastapiServer/.env  # .env 파일 경로 지정
+    ports:
+      - "8000:8000"  # 호스트의 8000번 포트와 컨테이너의 8000번 포트를 연결
+    networks:
+      - attention-network # 다른 서비스와 동일한 네트워크 사용 (기존 설정에 따라 변경)
+  
+  react-dashboard:
+    build:
+      context: ./react-dashboard
+    container_name: react-dashboard
+    ports:
+      - "3001:80"
+    depends_on:
+      - fastapi-server
+    networks:
+      - attention-network
+
 
 networks:
   attention-network:

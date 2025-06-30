@@ -12,7 +12,6 @@ websocket/target/
 
 .env
 
-docker-compose.yml
 
 
 /dataScripts/augmented_reports
